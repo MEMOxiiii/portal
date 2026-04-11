@@ -1,41 +1,206 @@
-![Banner](https://raw.githubusercontent.com/Paroxity/portal/master/banner.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MEMOxiiii/portal/master/banner.png" alt="Portal Banner" width="100%"/>
+</p>
 
-A lightweight transfer proxy written in Go for Minecraft: Bedrock Edition.
+<p align="center">
+  <strong>Portal</strong> — A lightweight transfer proxy for Minecraft: Bedrock Edition
+</p>
 
-# Installation
+<p align="center">
+  <a href="https://github.com/MEMOxiiii/portal/releases"><img src="https://img.shields.io/github/v/release/MEMOxiiii/portal?style=flat-square&color=%2300b894" alt="Release"></a>
+  <a href="https://github.com/MEMOxiiii/portal/blob/master/LICENCE"><img src="https://img.shields.io/badge/License-Apache%202.0-0984e3?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/Go-1.24+-00cec9?style=flat-square&logo=go&logoColor=white" alt="Go 1.24+">
+  <img src="https://img.shields.io/badge/Bedrock-Protocol%20v944-6c5ce7?style=flat-square" alt="Bedrock Protocol">
+</p>
 
-1. Download the latest release for your platform from
-   the [GitHub releases page](https://github.com/Paroxity/portal/releases/)
-2. Move it to a directory of your choice, and run from the command line.
+---
 
-*Note for Linux/macOS users: run `chmod +x` on the binary to make it executable.*
+## Overview
 
-# Configuration
+**Portal** is a transfer proxy written in Go that allows Bedrock Edition players to seamlessly move between multiple backend servers — regardless of what server software each one runs. Players connect to Portal once, and transfers between servers happen instantly without disconnecting.
 
-After running portal for the first time, a default configuration file called `config.json` will be created in the same
-directory as the program.
+Portal supports any combination of backend server software through its TCP socket API:
 
-### Overview of the configuration file
+### Supported Platforms
 
-- **network**
-    - **address**: The address on which the proxy should listen. Players may connect to this address in order to join.
-      It should be in the format of "ip:port"
-    - **communication**
-        - **address**: Address is the address on which the communication service should listen. External connections can
-          use this address in order to communicate with the proxy. It should be in the format of "ip:port"
-        - **secret**: Secret is the authentication secret required by external connections in order to authenticate to
-          the proxy and start communicating
-- **logger**
-    - **file**: File is the path to the file in which logs should be stored. If the path is empty then logs will not be
-      written to a file
-    - **level**: Level is the required level logs should have to be shown in console or in the file above
-- **player_latency**
-    - **report**: Determines if the proxy should send the proxy of a player to their server at a regular interval
-    - **update_interval**: The interval to report a player's ping if report is true
-- **whitelist**
-    - **enabled**: Determines if the whitelist is enabled
-    - **players**: A list of whitelisted players' usernames
-- **resource_packs**
-    - **required**: Determines if players are required to download the resource packs before connecting
-    - **directory**: The directory to load resource packs from. They can be directories, .zip files or .mcpack files
-    - **encryption_keys**: A map of resource pack UUIDs to their encryption key
+| Platform | Library | Type | Engine | Status |
+|:---|:---|:---|:---|:---|
+| **PocketMine-MP** (PHP) | [PortalPM](https://github.com/MEMOxiiii/PortalPM) | Plugin | PocketMine-MP 5.x | ✅ Supported |
+| **Dragonfly** (Go) | [PortalDF](https://github.com/MEMOxiiii/PortalDF) | Library | [Dragonfly](https://github.com/df-mc/dragonfly) | ✅ Supported |
+| **GeyserMC** (Java) | [Portal-GeyserMC](https://github.com/MEMOxiiii/Portal-GeyserMC) | Extension | [GeyserMC](https://geysermc.org/) 2.9.5+ | ✅ Supported |
+| **NukkitX / PowerNukkitX** (Java) | — | Plugin | [NukkitX](https://github.com/CloudburstMC/Nukkit) / [PowerNukkitX](https://github.com/PowerNukkitX/PowerNukkitX) | 🔜 Coming Soon |
+| **EndstoneMC** (BDS) | — | Plugin | [Endstone](https://github.com/EndstoneMC/endstone) (BDS) | ⚠️ Experimental ¹ |
+
+> ¹ **EndstoneMC (BDS):** We will attempt to support Endstone in future releases, but we cannot guarantee full compatibility due to BDS limitations. In the meantime, you can use **[GeyserMC](https://github.com/MEMOxiiii/Portal-GeyserMC)** as an alternative to connect BDS-based servers to the Portal network.
+
+## Features
+
+- **Zero-downtime Transfers** — Players switch servers instantly without disconnects
+- **Multi-platform** — Mix PocketMine, Dragonfly, GeyserMC (and more) servers on the same network
+- **TCP Socket API** — Simple binary protocol for integrating any server software
+- **Resource Packs** — Serve resource packs from the proxy level
+- **Whitelist** — Built-in whitelist support
+- **Latency Reporting** — Real-time player latency tracking sent to backend servers
+- **Lightweight** — Minimal resource footprint, written in Go
+
+## Installation
+
+### From Releases
+
+1. Download the latest binary for your platform from [Releases](https://github.com/MEMOxiiii/portal/releases)
+2. Place it in a directory of your choice
+3. Run it from the command line
+
+> **Linux/macOS:** Run `chmod +x portal` to make the binary executable.
+
+### From Source
+
+```bash
+git clone https://github.com/MEMOxiiii/portal.git
+cd portal
+go build -o portal ./examples/main.go
+```
+
+## Configuration
+
+On first run, a `config.json` file is generated. Here's the full reference:
+
+```json
+{
+  "network": {
+    "address": ":19132",
+    "communication": {
+      "address": ":19131",
+      "secret": ""
+    },
+    "reader_limits": true
+  },
+  "logger": {
+    "file": "proxy.log",
+    "level": "info"
+  },
+  "player_latency": {
+    "report": true,
+    "update_interval": 5
+  },
+  "whitelist": {
+    "enabled": false,
+    "players": []
+  },
+  "resource_packs": {
+    "required": false,
+    "directory": "resource_packs",
+    "encryption_keys": {}
+  }
+}
+```
+
+### Configuration Reference
+
+| Key | Description | Default |
+|:---|:---|:---|
+| `network.address` | Address players connect to (`ip:port`) | `:19132` |
+| `network.communication.address` | Socket API address for backend servers | `:19131` |
+| `network.communication.secret` | Authentication secret (must match backend configs) | `""` |
+| `network.reader_limits` | Enable protocol reader limits | `true` |
+| `logger.file` | Log file path (empty = no file logging) | `proxy.log` |
+| `logger.level` | Minimum log level (`debug`, `info`, `warn`, `error`) | `info` |
+| `player_latency.report` | Send player latency to backend servers | `true` |
+| `player_latency.update_interval` | Latency report interval in seconds | `5` |
+| `whitelist.enabled` | Enable username whitelist | `false` |
+| `whitelist.players` | Array of whitelisted usernames | `[]` |
+| `resource_packs.required` | Require resource pack download | `false` |
+| `resource_packs.directory` | Directory for resource packs (`.zip`, `.mcpack`, or folders) | `resource_packs` |
+| `resource_packs.encryption_keys` | Map of pack UUID → encryption key | `{}` |
+
+## Network Architecture
+
+```
+                         ┌──────────────────────┐
+                         │     Portal Proxy      │
+                         │                       │
+  Bedrock Players ──────▶│  :19132 (players)     │
+                         │  :19131 (socket API)  │
+                         │                       │
+                         └───┬──────┬──────┬─────┘
+                             │      │      │
+                    ┌────────┘      │      └────────┐
+                    ▼               ▼               ▼
+             ┌────────────┐  ┌────────────┐  ┌────────────┐
+             │ PocketMine │  │ Dragonfly  │  │  GeyserMC  │
+             │ (PortalPM) │  │ (PortalDF) │  │ (Portal-   │
+             │            │  │            │  │  GeyserMC) │
+             └────────────┘  └────────────┘  └────────────┘
+```
+
+## Socket Protocol
+
+Portal communicates with backend servers via a binary TCP protocol:
+
+- **Frame:** 4-byte little-endian length prefix + payload
+- **Packet Header:** 2-byte little-endian packet ID
+- **Strings:** Varuint32 length prefix + UTF-8 bytes
+- **UUIDs:** 16 bytes (big-endian)
+- **Integers:** Little-endian
+
+### Packet Types
+
+| ID | Packet | Direction | Description |
+|:---|:---|:---|:---|
+| `0x00` | AuthRequest | Server → Proxy | Authenticate with secret |
+| `0x01` | AuthResponse | Proxy → Server | Authentication result |
+| `0x02` | RegisterServer | Server → Proxy | Register server name + address |
+| `0x03` | TransferRequest | Server → Proxy | Request player transfer |
+| `0x04` | TransferResponse | Proxy → Server | Transfer result |
+| `0x05` | PlayerInfoRequest | Server → Proxy | Query player XUID/IP |
+| `0x06` | PlayerInfoResponse | Proxy → Server | Player info result |
+| `0x07` | ServerListRequest | Server → Proxy | Request all servers |
+| `0x08` | ServerListResponse | Proxy → Server | List of servers + counts |
+| `0x09` | FindPlayerRequest | Server → Proxy | Find player on network |
+| `0x0A` | FindPlayerResponse | Proxy → Server | Player location result |
+| `0x0B` | UpdatePlayerLatency | Proxy → Server | Player latency update |
+
+## Quick Start Example
+
+Here's a minimal example using the Portal Go library:
+
+```go
+package main
+
+import (
+    "github.com/paroxity/portal"
+    "github.com/sirupsen/logrus"
+)
+
+func main() {
+    log := logrus.New()
+    
+    p, err := portal.New(portal.DefaultConfig(), log)
+    if err != nil {
+        log.Fatalf("Failed to create portal: %v", err)
+    }
+    
+    defer p.Close()
+    
+    // Portal is now running and accepting connections
+    select {}
+}
+```
+
+## Client Libraries
+
+Integrate your server with Portal using the appropriate library:
+
+| Library | Language | Install |
+|:---|:---|:---|
+| [PortalPM](https://github.com/MEMOxiiii/PortalPM) | PHP | Drop plugin into `plugins/` |
+| [PortalDF](https://github.com/MEMOxiiii/PortalDF) | Go | `go get github.com/MEMOxiiii/PortalDF` |
+| [Portal-GeyserMC](https://github.com/MEMOxiiii/Portal-GeyserMC) | Java | Drop JAR into Geyser `extensions/` |
+
+## Credits
+
+This project is originally forked from [**Paroxity/portal**](https://github.com/Paroxity/portal). All credit for the original proxy architecture and protocol design goes to the [Paroxity](https://github.com/Paroxity) team. This fork extends and maintains the project with additional platform support and improvements.
+
+## License
+
+[Apache License 2.0](LICENCE)
