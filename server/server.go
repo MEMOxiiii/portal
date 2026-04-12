@@ -6,17 +6,19 @@ import (
 
 // Server represents a server connected to the proxy which players can join and play on.
 type Server struct {
-	name    string
-	address string
+	name       string
+	address    string
+	legacyAuth bool
 
 	playerCount atomic.Int64
 }
 
-// New creates a new Server with the provided name, group and address.
-func New(name, address string) *Server {
+// New creates a new Server with the provided name, address and legacy auth setting.
+func New(name, address string, legacyAuth bool) *Server {
 	s := &Server{
-		name:    name,
-		address: address,
+		name:       name,
+		address:    address,
+		legacyAuth: legacyAuth,
 	}
 
 	return s
@@ -31,6 +33,11 @@ func (s *Server) Name() string {
 // by a colon. E.g. "127.0.0.1:19132".
 func (s *Server) Address() string {
 	return s.address
+}
+
+// LegacyAuth returns whether the proxy should use legacy authentication when dialing this server.
+func (s *Server) LegacyAuth() bool {
+	return s.legacyAuth
 }
 
 // IncrementPlayerCount increments the player count of the server.

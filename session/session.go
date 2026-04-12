@@ -116,8 +116,9 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 	c.PlayFabID = ""
 	c.ThirdPartyName = i.DisplayName
 	return minecraft.Dialer{
-		ClientData:   c,
-		IdentityData: i,
+		ClientData:       c,
+		IdentityData:     i,
+		EnableLegacyAuth: srv.LegacyAuth(),
 	}.Dial("raknet", srv.Address())
 }
 
