@@ -73,14 +73,16 @@ func handlePackets(s *Session) {
 							Radius: uint32(gameData.ChunkRadius) << 4,
 						})
 
-						// Ensure the player is not stuck on the death screen after transfer.
-						if s.dead.CAS(true, false) {
-							_ = s.conn.WritePacket(&packet.Respawn{
-								Position:        gameData.PlayerPosition,
-								State:           packet.RespawnStateReadyToSpawn,
-								EntityRuntimeID: s.originalRuntimeID,
-							})
-						}
+						// Always clear the death screen after transfer, regardless of the proxy's
+						// tracked dead state. The new server may have queued Respawn{SearchingForSpawn}
+						// packets that haven't been read yet, so we preemptively tell the client
+						// they are alive to prevent the death screen from appearing.
+						s.dead.Store(false)
+						_ = s.conn.WritePacket(&packet.Respawn{
+							Position:        gameData.PlayerPosition,
+							State:           packet.RespawnStateReadyToSpawn,
+							EntityRuntimeID: s.originalRuntimeID,
+						})
 
 						w.Wait()
 
@@ -185,6 +187,18 @@ func handlePackets(s *Session) {
 			case *packet.Respawn:
 				if pk.State == packet.RespawnStateSearchingForSpawn {
 					s.dead.Store(true)
+					// During the post-transfer phase, the new server may have queued a
+					// Respawn{SearchingForSpawn} from a previous session's death state.
+					// Suppress it to prevent the death screen from blocking the second
+					// dimension change, and auto-respond to respawn on the server.
+					if s.postTransfer.Load() {
+						_ = conn.WritePacket(&packet.Respawn{
+							Position:        pk.Position,
+							State:           packet.RespawnStateClientReadyToSpawn,
+							EntityRuntimeID: pk.EntityRuntimeID,
+						})
+						continue
+					}
 				} else if pk.State == packet.RespawnStateReadyToSpawn {
 					s.dead.Store(false)
 				}

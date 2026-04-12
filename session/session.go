@@ -223,6 +223,15 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			return
 		}
 
+		// Force-respawn on the new server in case the player was dead from a previous session.
+		// Without this, GeyserMC/Spigot may keep the player in a dead state, and the queued
+		// Respawn{SearchingForSpawn} packet will interfere with the dimension trick.
+		_ = conn.WritePacket(&packet.Respawn{
+			Position:        conn.GameData().PlayerPosition,
+			State:           packet.RespawnStateClientReadyToSpawn,
+			EntityRuntimeID: conn.GameData().EntityRuntimeID,
+		})
+
 		s.serverMu.Lock()
 		s.tempServerConn = conn
 		s.serverMu.Unlock()
