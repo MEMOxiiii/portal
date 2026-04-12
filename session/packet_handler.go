@@ -86,6 +86,12 @@ func handlePackets(s *Session) {
 
 						w.Wait()
 
+						// Send a Disconnect packet before closing so the downstream server
+						// (e.g. GeyserMC → Spigot) immediately cleans up the player session
+						// instead of waiting for a Raknet timeout.
+						_ = s.serverConn.WritePacket(&packet.Disconnect{
+							Message: "Server transfer",
+						})
 						_ = s.serverConn.Close()
 
 						s.serverConn = s.tempServerConn
