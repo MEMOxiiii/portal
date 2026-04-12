@@ -2,12 +2,13 @@ package session
 
 import (
 	"errors"
+	"net"
+	"sync"
+
 	"github.com/paroxity/portal/event"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
-	"net"
-	"sync"
 )
 
 // handlePackets handles the packets sent between the client and the server. Processes such as runtime

@@ -111,16 +111,24 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 // that server, along with any error that may have occurred.
 func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 	i := s.conn.IdentityData()
-	i.XUID = ""
 	c := s.conn.ClientData()
 	c.PlatformOnlineID = ""
 	c.PlatformOfflineID = ""
 	c.PlayFabID = ""
 	c.ThirdPartyName = i.DisplayName
+
+	// For legacy auth servers (e.g. PocketMine), clear XUID as it is embedded in the Xbox JWT chain.
+	// For non-legacy auth servers (e.g. GeyserMC), keep the real XUID so each player has a unique
+	// identifier. GeyserMC uses XUID to detect duplicate sessions — clearing it causes all proxy
+	// connections to collide with "already logged in".
+	if srv.LegacyAuth() {
+		i.XUID = ""
+	}
 	return minecraft.Dialer{
-		ClientData:       c,
-		IdentityData:     i,
-		EnableLegacyAuth: srv.LegacyAuth(),
+		ClientData:          c,
+		IdentityData:        i,
+		EnableLegacyAuth:    srv.LegacyAuth(),
+		KeepXBLIdentityData: !srv.LegacyAuth(),
 	}.Dial("raknet", srv.Address())
 }
 

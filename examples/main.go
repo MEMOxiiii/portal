@@ -2,6 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"os"
+	"time"
+
 	"github.com/paroxity/portal"
 	"github.com/paroxity/portal/internal"
 	portallog "github.com/paroxity/portal/log"
@@ -11,9 +15,6 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/text"
 	"github.com/sirupsen/logrus"
-	"io/ioutil"
-	"os"
-	"time"
 )
 
 func main() {

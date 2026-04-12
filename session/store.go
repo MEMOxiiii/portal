@@ -1,8 +1,9 @@
 package session
 
 import (
-	"github.com/google/uuid"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 // Store represents a store which holds all the open sessions on the proxy.
