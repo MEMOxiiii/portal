@@ -3,7 +3,6 @@ on:
   release:
     types:
       - created
-
 jobs:
   build:
     name: Build ${{ matrix.os }}-${{ matrix.arch }}
@@ -14,28 +13,18 @@ jobs:
         arch: [ "amd64", "arm64" ]
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@v2
       - name: Setup Golang
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
-          cache: true 
-
       - name: Get dependencies
         run: |
-          go mod tidy
-          go mod download
-
+          mkdir -p $GOPATH/bin
+          export PATH=$PATH:$GOPATH/bin
       - name: Build Executable
-        run: |
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build \
-          -o portal_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} \
-          -ldflags="-s -w" -v examples/main.go
-
+        run: GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o portal_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} -ldflags="-s -w" -v examples/main.go
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: portal_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
