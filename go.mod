@@ -2,6 +2,8 @@ module github.com/paroxity/portal
 
 go 1.24.0
 
+replace github.com/sandertv/gophertunnel => ./third_party/gophertunnel
+
 require (
 	github.com/go-gl/mathgl v1.1.0
 	github.com/google/uuid v1.6.0

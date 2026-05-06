@@ -101,7 +101,7 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 		}
 		log.Infof("%s has been connected to server %s", conn.IdentityData().DisplayName, srv.Name())
 
-		s.translator = newTranslator(srvConn.GameData())
+		s.translator = newTranslator(s.currentServerGameData())
 		handlePackets(s)
 	}()
 	return s, nil
@@ -116,6 +116,7 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 	c.PlatformOfflineID = ""
 	c.PlayFabID = ""
 	c.ThirdPartyName = i.DisplayName
+	c.GameVersion = internal.BedrockGameVersion
 
 	// For legacy auth servers (e.g. PocketMine), clear XUID as it is embedded in the Xbox JWT chain.
 	// For non-legacy auth servers (e.g. GeyserMC), keep the real XUID so each player has a unique
@@ -134,10 +135,11 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 
 // login performs the initial login sequence for the session.
 func (s *Session) login() (err error) {
+	gameData := s.currentServerGameData()
 	var g sync.WaitGroup
 	g.Add(2)
 	go func() {
-		err = s.conn.StartGameTimeout(s.serverConn.GameData(), time.Minute)
+		err = s.conn.StartGameTimeout(gameData, time.Minute)
 		g.Done()
 	}()
 	go func() {
@@ -146,6 +148,12 @@ func (s *Session) login() (err error) {
 	}()
 	g.Wait()
 	return
+}
+
+func (s *Session) currentServerGameData() minecraft.GameData {
+	data := s.serverConn.GameData()
+	data.BaseGameVersion = internal.BedrockGameVersion
+	return data
 }
 
 // waitForLogin uses the login mutex to wait for the login to complete. If the player is still logging in, loginMu will

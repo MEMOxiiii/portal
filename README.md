@@ -10,7 +10,7 @@
   <a href="https://github.com/MEMOxiiii/portal/releases"><img src="https://img.shields.io/github/v/release/MEMOxiiii/portal?style=flat-square&color=%2300b894" alt="Release"></a>
   <a href="https://github.com/MEMOxiiii/portal/blob/master/LICENCE"><img src="https://img.shields.io/badge/License-Apache%202.0-0984e3?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/Go-1.24+-00cec9?style=flat-square&logo=go&logoColor=white" alt="Go 1.24+">
-  <img src="https://img.shields.io/badge/Bedrock-Protocol%20v975-6c5ce7?style=flat-square" alt="Bedrock Protocol">
+  <img src="https://img.shields.io/badge/Bedrock-v975%20%7C%201.26.2-6c5ce7?style=flat-square" alt="Bedrock Protocol">
 </p>
 
 ---
@@ -18,6 +18,8 @@
 ## Overview
 
 **Portal** is a transfer proxy written in Go that allows Bedrock Edition players to seamlessly move between multiple backend servers — regardless of what server software each one runs. Players connect to Portal once, and transfers between servers happen instantly without disconnecting.
+
+This build targets Minecraft Bedrock protocol **975** with game version **1.26.2**.
 
 Portal supports any combination of backend server software through its TCP socket API:
 
