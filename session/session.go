@@ -89,14 +89,14 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 		defer s.loginMu.Unlock()
 		srvConn, err := s.dial(srv)
 		if err != nil {
-			log.Errorf("failed to dial server %s: %w", srv.Address(), err)
+			log.Errorf("failed to dial server %s: %v (unwrapped: %+v)", srv.Address(), err, errors.Unwrap(err))
 			return
 		}
 
 		s.serverConn = srvConn
 		if err = s.login(); err != nil {
 			_ = srvConn.Close()
-			log.Errorf("failed to login to server %s: %w", srv.Address(), err)
+			log.Errorf("failed to login to server %s: %v", srv.Address(), err)
 			return
 		}
 		log.Infof("%s has been connected to server %s", conn.IdentityData().DisplayName, srv.Name())
