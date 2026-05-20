@@ -93,7 +93,9 @@ On first run, a `config.json` file is generated. Here's the full reference:
     "required": false,
     "directory": "resource_packs",
     "encryption_keys": {}
-  }
+  },
+  "motd": "Portal",
+  "sub_motd": "Transfer Proxy"
 }
 ```
 
@@ -114,6 +116,8 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | `resource_packs.required` | Require resource pack download | `false` |
 | `resource_packs.directory` | Directory for resource packs (`.zip`, `.mcpack`, or folders) | `resource_packs` |
 | `resource_packs.encryption_keys` | Map of pack UUID → encryption key | `{}` |
+| `motd` | Main server list MOTD line | `Portal` |
+| `sub_motd` | Secondary server list MOTD line | `Transfer Proxy` |
 
 ## Network Architecture
 

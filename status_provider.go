@@ -7,7 +7,8 @@ import (
 
 // MOTDStatusProvider represents a status provider that shows a custom MOTD which can be changed at any time.
 type MOTDStatusProvider struct {
-	motd atomic.String
+	motd    atomic.String
+	subMotd atomic.String
 }
 
 // NewMOTDStatusProvider creates a new server status provider which shows a custom message in the server list.
@@ -22,11 +23,18 @@ func (p *MOTDStatusProvider) MOTD(v string) {
 	p.motd.Store(v)
 }
 
+// SubMOTD sets the sub MOTD for the current provider and returns the provider.
+func (p *MOTDStatusProvider) SubMOTD(v string) *MOTDStatusProvider {
+	p.subMotd.Store(v)
+	return p
+}
+
 // ServerStatus ...
 func (p *MOTDStatusProvider) ServerStatus(playerCount, maxPlayers int) minecraft.ServerStatus {
 	return minecraft.ServerStatus{
-		ServerName:  p.motd.Load(),
-		PlayerCount: playerCount,
-		MaxPlayers:  maxPlayers,
+		ServerName:    p.motd.Load(),
+		ServerSubName: p.subMotd.Load(),
+		PlayerCount:   playerCount,
+		MaxPlayers:    maxPlayers,
 	}
 }

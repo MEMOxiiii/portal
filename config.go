@@ -60,6 +60,10 @@ type Config struct {
 		// EncryptionKeys is a map of resource pack UUIDs to their encryption key.
 		EncryptionKeys map[string]string `json:"encryption_keys,omitempty"`
 	} `json:"resource_packs"`
+	// MOTD is the message of the day shown in the server list ping.
+	MOTD string `json:"motd"`
+	// SubMOTD is the secondary MOTD line shown in the server list ping.
+	SubMOTD string `json:"sub_motd"`
 }
 
 // DefaultConfig returns a configuration with the default values filled out.
@@ -72,6 +76,8 @@ func DefaultConfig() (c Config) {
 	c.PlayerLatency.Report = true
 	c.PlayerLatency.UpdateInterval = 5
 	c.ResourcePacks.Directory = "resource_packs"
+	c.MOTD = "Portal"
+	c.SubMOTD = "Transfer Proxy"
 	return
 }
 

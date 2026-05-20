@@ -55,7 +55,7 @@ func main() {
 
 		Address: conf.Network.Address,
 		ListenConfig: minecraft.ListenConfig{
-			StatusProvider: portal.NewMOTDStatusProvider("Portal"),
+			StatusProvider: portal.NewMOTDStatusProvider(conf.MOTD).SubMOTD(conf.SubMOTD),
 
 			ResourcePacks:        resourcePacks,
 			TexturePacksRequired: conf.ResourcePacks.Required,
