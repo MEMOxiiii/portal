@@ -21,6 +21,7 @@ type ResourcePackManager struct {
 	dir            string
 	encryptionKeys map[string]string
 
+	reloadMu    sync.Mutex
 	mu          sync.RWMutex
 	packs       []*resource.Pack
 	fingerprint string
@@ -53,6 +54,9 @@ func (m *ResourcePackManager) FetchResourcePacks(login.IdentityData, login.Clien
 
 // Reload loads resource packs from disk and swaps them in atomically if loading succeeds.
 func (m *ResourcePackManager) Reload() error {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+
 	packs, fingerprint, err := m.load()
 	if err != nil {
 		return err
@@ -112,15 +116,25 @@ func (m *ResourcePackManager) StartHotReload(ctx context.Context, interval time.
 }
 
 func (m *ResourcePackManager) load() ([]*resource.Pack, string, error) {
+	if err := ensureResourcePackDir(m.dir); err != nil {
+		return nil, "", err
+	}
+	before, err := resourcePackFingerprint(m.dir)
+	if err != nil {
+		return nil, "", err
+	}
 	packs, err := LoadResourcePacksWithContentKeys(m.dir, m.encryptionKeys)
 	if err != nil {
 		return nil, "", err
 	}
-	fingerprint, err := resourcePackFingerprint(m.dir)
+	after, err := resourcePackFingerprint(m.dir)
 	if err != nil {
 		return nil, "", err
 	}
-	return packs, fingerprint, nil
+	if before != after {
+		return nil, "", fmt.Errorf("resource packs changed while loading")
+	}
+	return packs, after, nil
 }
 
 func resourcePackFingerprint(dir string) (string, error) {
@@ -128,6 +142,9 @@ func resourcePackFingerprint(dir string) (string, error) {
 	if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("resource pack path contains symbolic link: %s", path)
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -137,7 +154,11 @@ func resourcePackFingerprint(dir string) (string, error) {
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(hash, "%s\x00%d\x00%d\x00%t\x00", rel, info.Size(), info.ModTime().UnixNano(), d.IsDir())
+		if d.IsDir() {
+			_, _ = fmt.Fprintf(hash, "%s\x00dir\x00", rel)
+			return nil
+		}
+		_, _ = fmt.Fprintf(hash, "%s\x00file\x00%d\x00%d\x00", rel, info.Size(), info.ModTime().UnixNano())
 		return nil
 	}); err != nil {
 		return "", err

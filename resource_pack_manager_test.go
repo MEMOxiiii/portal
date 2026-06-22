@@ -66,6 +66,19 @@ func TestResourcePackManagerKeepsSnapshotAfterFailedReload(t *testing.T) {
 	}
 }
 
+func TestLoadResourcePacksRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	targetDir := t.TempDir()
+	writeTestResourcePack(t, targetDir, "linked", "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222")
+
+	if err := os.Symlink(filepath.Join(targetDir, "linked"), filepath.Join(dir, "linked")); err != nil {
+		t.Skipf("symlinks are not available: %v", err)
+	}
+	if _, err := LoadResourcePacks(dir); err == nil {
+		t.Fatal("expected symlinked resource pack to be rejected")
+	}
+}
+
 func writeTestResourcePack(t *testing.T, dir, name, packUUID, moduleUUID string) {
 	t.Helper()
 
