@@ -1,8 +1,10 @@
 package portal
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -76,6 +78,85 @@ func TestLoadResourcePacksRejectsSymlink(t *testing.T) {
 	}
 	if _, err := LoadResourcePacks(dir); err == nil {
 		t.Fatal("expected symlinked resource pack to be rejected")
+	}
+}
+
+func TestLoadResourcePacksRejectsNestedSymlink(t *testing.T) {
+	dir := t.TempDir()
+	writeTestResourcePack(t, dir, "pack", "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222")
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "pack", "outside.txt")); err != nil {
+		t.Skipf("symlinks are not available: %v", err)
+	}
+	if _, err := LoadResourcePacks(dir); err == nil {
+		t.Fatal("expected resource pack with nested symlink to be rejected")
+	}
+}
+
+func TestResourcePackManagerSnapshotIsolation(t *testing.T) {
+	dir := t.TempDir()
+	writeTestResourcePack(t, dir, "one", "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222")
+
+	manager, err := NewResourcePackManager(dir, nil)
+	if err != nil {
+		t.Fatalf("create manager: %v", err)
+	}
+
+	packs := manager.ResourcePacks()
+	packs[0] = nil
+	if manager.ResourcePacks()[0] == nil {
+		t.Fatal("mutating returned pack slice changed manager state")
+	}
+}
+
+func TestResourcePackManagerConcurrentReloadAndRead(t *testing.T) {
+	dir := t.TempDir()
+	writeTestResourcePack(t, dir, "one", "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222")
+
+	manager, err := NewResourcePackManager(dir, nil)
+	if err != nil {
+		t.Fatalf("create manager: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 24)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 50 {
+				packs := manager.ResourcePacks()
+				if len(packs) != 1 {
+					errs <- fmt.Errorf("unexpected resource pack count: %d", len(packs))
+					return
+				}
+				if packs[0] == nil || packs[0].Version() != "1.0.0" {
+					errs <- fmt.Errorf("unexpected resource pack snapshot")
+					return
+				}
+				packs[0] = nil
+			}
+		}()
+	}
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 20 {
+				if err := manager.Reload(); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
 	}
 }
 

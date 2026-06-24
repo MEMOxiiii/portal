@@ -105,10 +105,12 @@ func (m *ResourcePackManager) StartHotReload(ctx context.Context, interval time.
 		case <-ticker.C:
 			changed, err := m.ReloadIfChanged()
 			if err != nil {
-				log.Errorf("failed to hot reload resource packs: %v", err)
+				if log != nil {
+					log.Errorf("failed to hot reload resource packs: %v", err)
+				}
 				continue
 			}
-			if changed {
+			if changed && log != nil {
 				log.Infof("hot reloaded %d resource pack(s)", len(m.ResourcePacks()))
 			}
 		}
