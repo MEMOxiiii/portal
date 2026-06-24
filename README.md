@@ -41,6 +41,7 @@ Portal supports any combination of backend server software through its TCP socke
 - **Multi-platform** — Mix PocketMine, Dragonfly, GeyserMC (and more) servers on the same network
 - **TCP Socket API** — Simple binary protocol for integrating any server software
 - **Resource Packs** — Serve resource packs from the proxy level
+- **Resource Pack Hot Reload** — Reload proxy resource packs for new connections without restarting Portal
 - **Whitelist** — Built-in whitelist support
 - **Latency Reporting** — Real-time player latency tracking sent to backend servers
 - **Lightweight** — Minimal resource footprint, written in Go
@@ -92,7 +93,11 @@ On first run, a `config.json` file is generated. Here's the full reference:
   "resource_packs": {
     "required": false,
     "directory": "resource_packs",
-    "encryption_keys": {}
+    "encryption_keys": {},
+    "hot_reload": {
+      "enabled": false,
+      "interval": 30
+    }
   },
   "motd": "Portal",
   "sub_motd": "Transfer Proxy"
@@ -116,6 +121,8 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | `resource_packs.required` | Require resource pack download | `false` |
 | `resource_packs.directory` | Directory for resource packs (`.zip`, `.mcpack`, or folders) | `resource_packs` |
 | `resource_packs.encryption_keys` | Map of pack UUID → encryption key | `{}` |
+| `resource_packs.hot_reload.enabled` | Reload changed resource packs without restarting Portal. New connections receive the latest successful snapshot. | `false` |
+| `resource_packs.hot_reload.interval` | Resource pack change check interval in seconds | `30` |
 | `motd` | Main server list MOTD line | `Portal` |
 | `sub_motd` | Secondary server list MOTD line | `Transfer Proxy` |
 

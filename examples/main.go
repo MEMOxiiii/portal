@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"os"
@@ -39,15 +40,17 @@ func main() {
 	}
 	logger.SetLevel(level)
 
-	resourcePacks, err := portal.LoadResourcePacks(conf.ResourcePacks.Directory)
+	resourcePackManager, err := portal.NewResourcePackManager(conf.ResourcePacks.Directory, conf.ResourcePacks.EncryptionKeys)
 	if err != nil {
 		logger.Fatalf("unable to load resource packs: %v", err)
 	}
-	for i, pack := range resourcePacks {
-		key, ok := conf.ResourcePacks.EncryptionKeys[pack.UUID().String()]
-		if ok {
-			resourcePacks[i] = pack.WithContentKey(key)
+	if conf.ResourcePacks.HotReload.Enabled {
+		interval := time.Duration(conf.ResourcePacks.HotReload.Interval) * time.Second
+		if interval <= 0 {
+			interval = 30 * time.Second
 		}
+		go resourcePackManager.StartHotReload(context.Background(), interval, logger)
+		logger.Infof("resource pack hot reload enabled with %s interval", interval)
 	}
 
 	p := portal.New(portal.Options{
@@ -57,7 +60,8 @@ func main() {
 		ListenConfig: minecraft.ListenConfig{
 			StatusProvider: portal.NewMOTDStatusProvider(conf.MOTD).SubMOTD(conf.SubMOTD),
 
-			ResourcePacks:        resourcePacks,
+			ResourcePacks:        resourcePackManager.ResourcePacks(),
+			FetchResourcePacks:   resourcePackManager.FetchResourcePacks,
 			TexturePacksRequired: conf.ResourcePacks.Required,
 		},
 
