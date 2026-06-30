@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"crypto/tls"
 	"github.com/paroxity/portal/internal"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
@@ -42,6 +43,7 @@ type DefaultServer struct {
 	addr         string
 	secret       string
 	readerLimits bool
+	tlsConfig    *tls.Config
 
 	listener           net.Listener
 	clientsMu          sync.RWMutex
@@ -69,9 +71,23 @@ func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRe
 	}
 }
 
+// NewDefaultTLSServer creates a new default server which serves the communication socket over TLS using the
+// provided certificate. Backend servers must dial using TLS in order to connect.
+func NewDefaultTLSServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool, tlsConfig *tls.Config) *DefaultServer {
+	s := NewDefaultServer(addr, secret, sessionStore, serverRegistry, log, readerLimits)
+	s.tlsConfig = tlsConfig
+	return s
+}
+
 // Listen ...
 func (s *DefaultServer) Listen() error {
-	listener, err := net.Listen("tcp", s.addr)
+	var listener net.Listener
+	var err error
+	if s.tlsConfig != nil {
+		listener, err = tls.Listen("tcp", s.addr, s.tlsConfig)
+	} else {
+		listener, err = net.Listen("tcp", s.addr)
+	}
 	if err != nil {
 		return err
 	}

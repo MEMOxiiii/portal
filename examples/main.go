@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
 	"os"
@@ -71,7 +72,16 @@ func main() {
 		logger.Fatalf("failed to listen on %s: %v", conf.Network.Address, err)
 	}
 
-	socketServer := socket.NewDefaultServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits)
+	var socketServer *socket.DefaultServer
+	if conf.Network.Communication.TLS.Enabled {
+		cert, err := tls.LoadX509KeyPair(conf.Network.Communication.TLS.CertFile, conf.Network.Communication.TLS.KeyFile)
+		if err != nil {
+			logger.Fatalf("unable to load communication TLS certificate: %v", err)
+		}
+		socketServer = socket.NewDefaultTLSServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits, &tls.Config{Certificates: []tls.Certificate{cert}})
+	} else {
+		socketServer = socket.NewDefaultServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits)
+	}
 	if err := socketServer.Listen(); err != nil {
 		p.Logger().Fatalf("socket server failed to listen: %v", err)
 	}

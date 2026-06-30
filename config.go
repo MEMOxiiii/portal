@@ -26,6 +26,16 @@ type Config struct {
 			// Secret is the authentication secret required by external connections in order to authenticate
 			// to the proxy and start communicating.
 			Secret string `json:"secret"`
+			// TLS holds settings to encrypt the communication socket. When enabled, backend servers must
+			// connect using TLS as well.
+			TLS struct {
+				// Enabled determines whether the communication socket should be served over TLS.
+				Enabled bool `json:"enabled"`
+				// CertFile is the path to the PEM encoded certificate file.
+				CertFile string `json:"cert_file"`
+				// KeyFile is the path to the PEM encoded private key file.
+				KeyFile string `json:"key_file"`
+			} `json:"tls"`
 		} `json:"communication"`
 		// ReaderLimits determines if things like slices will have a maximum length as they are read from socket clients.
 		// It is recommended that this is always set to true in order to prevent possible attack vectors, however if any

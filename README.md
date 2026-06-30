@@ -74,7 +74,12 @@ On first run, a `config.json` file is generated. Here's the full reference:
     "address": ":19132",
     "communication": {
       "address": ":19131",
-      "secret": ""
+      "secret": "",
+      "tls": {
+        "enabled": false,
+        "cert_file": "",
+        "key_file": ""
+      }
     },
     "reader_limits": true
   },
@@ -111,6 +116,9 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | `network.address` | Address players connect to (`ip:port`) | `:19132` |
 | `network.communication.address` | Socket API address for backend servers | `:19131` |
 | `network.communication.secret` | Authentication secret (must match backend configs) | `""` |
+| `network.communication.tls.enabled` | Serve the communication socket over TLS (backends must dial with TLS too) | `false` |
+| `network.communication.tls.cert_file` | Path to the PEM encoded TLS certificate | `""` |
+| `network.communication.tls.key_file` | Path to the PEM encoded TLS private key | `""` |
 | `network.reader_limits` | Enable protocol reader limits | `true` |
 | `logger.file` | Log file path (empty = no file logging) | `proxy.log` |
 | `logger.level` | Minimum log level (`debug`, `info`, `warn`, `error`) | `info` |
