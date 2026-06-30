@@ -91,6 +91,14 @@ On first run, a `config.json` file is generated. Here's the full reference:
     "report": true,
     "update_interval": 5
   },
+  "security": {
+    "banned_ips": [],
+    "rate_limit": {
+      "enabled": true,
+      "window_seconds": 10,
+      "max_attempts": 5
+    }
+  },
   "routing": {
     "default_group": "",
     "fallback_groups": []
@@ -128,6 +136,10 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | `logger.level` | Minimum log level (`debug`, `info`, `warn`, `error`) | `info` |
 | `player_latency.report` | Send player latency to backend servers | `true` |
 | `player_latency.update_interval` | Latency report interval in seconds | `5` |
+| `security.banned_ips` | IP addresses that are always rejected at the player listener | `[]` |
+| `security.rate_limit.enabled` | Reject an IP once it connects too frequently | `true` |
+| `security.rate_limit.window_seconds` | Size of the sliding window connection attempts are counted over | `10` |
+| `security.rate_limit.max_attempts` | Max connection attempts allowed per IP within the window | `5` |
 | `routing.default_group` | Server group new players are load balanced into on join. Empty = balance across every registered server, ignoring groups | `""` |
 | `routing.fallback_groups` | Ordered list of groups to try if `default_group` has no available (non-draining) servers | `[]` |
 | `whitelist.enabled` | Enable username whitelist | `false` |

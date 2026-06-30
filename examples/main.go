@@ -69,6 +69,12 @@ func main() {
 		},
 
 		Whitelist: session.NewSimpleWhitelist(conf.Whitelist.Enabled, conf.Whitelist.Players),
+		IPGuard: session.NewSimpleIPGuard(
+			conf.Security.BannedIPs,
+			conf.Security.RateLimit.Enabled,
+			time.Duration(conf.Security.RateLimit.WindowSeconds)*time.Second,
+			conf.Security.RateLimit.MaxAttempts,
+		),
 	})
 	if conf.Routing.DefaultGroup != "" {
 		p.SetLoadBalancer(session.NewGroupedLoadBalancer(p.ServerRegistry(), conf.Routing.DefaultGroup, conf.Routing.FallbackGroups...))

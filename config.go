@@ -57,6 +57,21 @@ type Config struct {
 		// UpdateInterval is the interval to report a player's ping if Report is true.
 		UpdateInterval int `json:"update_interval"`
 	} `json:"player_latency"`
+	// Security holds settings related to protecting the proxy's player listener from abusive connections.
+	Security struct {
+		// BannedIPs is a list of IP addresses that are never allowed to connect to the proxy.
+		BannedIPs []string `json:"banned_ips"`
+		// RateLimit holds settings to limit how often a single IP may attempt to connect.
+		RateLimit struct {
+			// Enabled determines whether connection rate limiting is active.
+			Enabled bool `json:"enabled"`
+			// WindowSeconds is the size, in seconds, of the sliding window attempts are counted over.
+			WindowSeconds int `json:"window_seconds"`
+			// MaxAttempts is the maximum number of connection attempts allowed from a single IP within
+			// WindowSeconds before further attempts are rejected.
+			MaxAttempts int `json:"max_attempts"`
+		} `json:"rate_limit"`
+	} `json:"security"`
 	// Routing holds settings related to how players are load balanced onto groups of backend servers.
 	Routing struct {
 		// DefaultGroup is the server group new players are load balanced into when they first join the
@@ -105,6 +120,9 @@ func DefaultConfig() (c Config) {
 	c.Logger.Level = "debug"
 	c.PlayerLatency.Report = true
 	c.PlayerLatency.UpdateInterval = 5
+	c.Security.RateLimit.Enabled = true
+	c.Security.RateLimit.WindowSeconds = 10
+	c.Security.RateLimit.MaxAttempts = 5
 	c.ResourcePacks.Directory = "resource_packs"
 	c.ResourcePacks.HotReload.Interval = 30
 	c.MOTD = "Portal"

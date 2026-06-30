@@ -21,6 +21,7 @@ type Portal struct {
 	serverRegistry *server.Registry
 	loadBalancer   session.LoadBalancer
 	whitelist      session.Whitelist
+	ipGuard        session.IPGuard
 }
 
 // New instantiates portal using the provided options and returns it. If some options are not set, default
@@ -36,6 +37,9 @@ func New(opts Options) *Portal {
 	if opts.Whitelist == nil {
 		opts.Whitelist = session.NewSimpleWhitelist(false, []string{})
 	}
+	if opts.IPGuard == nil {
+		opts.IPGuard = session.NopIPGuard{}
+	}
 	return &Portal{
 		log: opts.Logger,
 
@@ -46,6 +50,7 @@ func New(opts Options) *Portal {
 		serverRegistry: serverRegistry,
 		loadBalancer:   opts.LoadBalancer,
 		whitelist:      opts.Whitelist,
+		ipGuard:        opts.IPGuard,
 	}
 }
 
@@ -99,6 +104,10 @@ func (p *Portal) Accept() (*session.Session, error) {
 		return nil, err
 	}
 	c := conn.(*minecraft.Conn)
+	if ok, m := p.ipGuard.Allow(c.RemoteAddr()); !ok {
+		_ = p.Disconnect(c, m)
+		return nil, fmt.Errorf("connection rejected by IP guard: %s", m)
+	}
 	if ok, m := p.whitelist.Authorize(c); !ok {
 		_ = p.Disconnect(c, m)
 		return nil, fmt.Errorf("player is not whitelisted: %s", m)
