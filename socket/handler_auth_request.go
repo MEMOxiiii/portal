@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"crypto/subtle"
 	"github.com/paroxity/portal/socket/packet"
 	_ "unsafe"
 )
@@ -20,7 +21,7 @@ func (*AuthRequestHandler) Handle(p packet.Packet, srv Server, c *Client) error 
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": unsupported protocol version %d", pk.Name, pk.Protocol)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseUnsupportedProtocol})
 	}
-	if pk.Secret != srv.Secret() {
+	if subtle.ConstantTimeCompare([]byte(pk.Secret), []byte(srv.Secret())) != 1 {
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": incorrect secret provided", pk.Name)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseIncorrectSecret})
 	}
