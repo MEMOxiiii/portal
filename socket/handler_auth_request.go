@@ -22,6 +22,7 @@ func (*AuthRequestHandler) Handle(p packet.Packet, srv Server, c *Client) error 
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseUnsupportedProtocol})
 	}
 	if subtle.ConstantTimeCompare([]byte(pk.Secret), []byte(srv.Secret())) != 1 {
+		srv.RecordAuthFailure(c.conn.RemoteAddr())
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": incorrect secret provided", pk.Name)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseIncorrectSecret})
 	}

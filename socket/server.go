@@ -29,6 +29,13 @@ type Server interface {
 	// name is not in use, unless called by places other than the socket server.
 	Authenticate(c *Client, name string)
 
+	// AuthBlocked returns whether the remote address has failed authentication too many times recently and
+	// is temporarily blocked from authenticating.
+	AuthBlocked(addr net.Addr) bool
+	// RecordAuthFailure records a failed authentication attempt from the remote address, which may cause it
+	// to become temporarily blocked.
+	RecordAuthFailure(addr net.Addr)
+
 	// SessionStore returns the store used to hold the open sessions on the proxy.
 	SessionStore() *session.Store
 	// ServerRegistry returns the registry used to store available servers on the proxy.
@@ -44,6 +51,7 @@ type DefaultServer struct {
 	secret       string
 	readerLimits bool
 	tlsConfig    *tls.Config
+	authThrottle *authThrottle
 
 	listener           net.Listener
 	clientsMu          sync.RWMutex
@@ -62,6 +70,7 @@ func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRe
 		addr:         addr,
 		secret:       secret,
 		readerLimits: readerLimits,
+		authThrottle: newAuthThrottle(),
 
 		clients:            make(map[string]*Client),
 		unconnectedClients: make(map[net.Addr]*Client),
@@ -111,12 +120,23 @@ func (s *DefaultServer) Listen() error {
 
 // handleClient handles a client that has been accepted from the socket server.
 func (s *DefaultServer) handleClient(c *Client) {
+	if s.AuthBlocked(c.conn.RemoteAddr()) {
+		s.log.Debugf("rejected socket connection from %s: too many failed authentication attempts", c.conn.RemoteAddr())
+		_ = c.Close()
+		return
+	}
+
 	defer s.handleClientDisconnect(c)
 	s.clientsMu.Lock()
 	s.unconnectedClients[c.conn.RemoteAddr()] = c
 	s.clientsMu.Unlock()
 
 	for {
+		if !c.Authenticated() && s.AuthBlocked(c.conn.RemoteAddr()) {
+			s.log.Debugf("closing socket connection from %s: too many failed authentication attempts", c.conn.RemoteAddr())
+			return
+		}
+
 		pk, err := c.ReadPacket()
 		if err != nil {
 			if containsAny(err.Error(), "EOF", "closed") {
@@ -195,6 +215,16 @@ func (s *DefaultServer) Authenticate(c *Client, name string) {
 	delete(s.unconnectedClients, c.conn.RemoteAddr())
 	s.clients[name] = c
 	c.Authenticate(name)
+}
+
+// AuthBlocked ...
+func (s *DefaultServer) AuthBlocked(addr net.Addr) bool {
+	return s.authThrottle.Blocked(addr)
+}
+
+// RecordAuthFailure ...
+func (s *DefaultServer) RecordAuthFailure(addr net.Addr) {
+	s.authThrottle.RecordFailure(addr)
 }
 
 // SessionStore ...
