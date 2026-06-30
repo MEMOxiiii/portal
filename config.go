@@ -57,6 +57,13 @@ type Config struct {
 		// UpdateInterval is the interval to report a player's ping if Report is true.
 		UpdateInterval int `json:"update_interval"`
 	} `json:"player_latency"`
+	// Metrics holds settings related to exposing Prometheus-style metrics over HTTP.
+	Metrics struct {
+		// Enabled determines whether the metrics HTTP endpoint should be served.
+		Enabled bool `json:"enabled"`
+		// Address is the address the metrics endpoint listens on, serving the metrics at "/metrics".
+		Address string `json:"address"`
+	} `json:"metrics"`
 	// Security holds settings related to protecting the proxy's player listener from abusive connections.
 	Security struct {
 		// BannedIPs is a list of IP addresses that are never allowed to connect to the proxy.
@@ -123,6 +130,7 @@ func DefaultConfig() (c Config) {
 	c.Security.RateLimit.Enabled = true
 	c.Security.RateLimit.WindowSeconds = 10
 	c.Security.RateLimit.MaxAttempts = 5
+	c.Metrics.Address = ":9131"
 	c.ResourcePacks.Directory = "resource_packs"
 	c.ResourcePacks.HotReload.Interval = 30
 	c.MOTD = "Portal"

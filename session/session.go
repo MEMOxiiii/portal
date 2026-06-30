@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
+	"github.com/paroxity/portal/metrics"
 	"github.com/paroxity/portal/server"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
@@ -204,6 +205,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 
 	s.log.Infof("%s is being transferred from %s to %s", s.conn.IdentityData().DisplayName, s.Server().Name(), srv.Name())
 
+	start := time.Now()
 	ctx := event.C()
 	s.handler().HandleTransfer(ctx, srv)
 
@@ -239,6 +241,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			if err != nil {
 				s.log.Errorf("transfer failed: could not dial %s: %v", srv.Name(), err)
 				s.setTransferring(false)
+				metrics.Default.RecordTransfer(false, time.Since(start))
 				return
 			}
 		}
@@ -246,6 +249,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			_ = conn.Close()
 			s.log.Errorf("transfer failed: spawn timeout on %s: %v", srv.Name(), err)
 			s.setTransferring(false)
+			metrics.Default.RecordTransfer(false, time.Since(start))
 			return
 		}
 
@@ -291,6 +295,8 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		s.server = srv
 		s.server.IncrementPlayerCount()
 		s.serverMu.Unlock()
+
+		metrics.Default.RecordTransfer(true, time.Since(start))
 	})
 
 	ctx.Stop(func() {

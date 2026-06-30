@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +14,7 @@ import (
 	"github.com/paroxity/portal"
 	"github.com/paroxity/portal/internal"
 	portallog "github.com/paroxity/portal/log"
+	"github.com/paroxity/portal/metrics"
 	"github.com/paroxity/portal/session"
 	"github.com/paroxity/portal/socket"
 	socketpacket "github.com/paroxity/portal/socket/packet"
@@ -108,6 +110,21 @@ func main() {
 
 	if conf.PlayerLatency.Report {
 		go socketServer.ReportPlayerLatency(time.Second * time.Duration(conf.PlayerLatency.UpdateInterval))
+	}
+
+	if conf.Metrics.Enabled {
+		metrics.Default.RegisterGauge("portal_players_online", func() float64 { return float64(len(p.SessionStore().All())) })
+		metrics.Default.RegisterGauge("portal_servers_registered", func() float64 { return float64(len(p.ServerRegistry().Servers())) })
+		metrics.Default.RegisterGauge("portal_socket_clients_connected", func() float64 { return float64(len(socketServer.Clients())) })
+
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", metrics.Default.Handler())
+		go func() {
+			logger.Infof("metrics endpoint listening on %s", conf.Metrics.Address)
+			if err := http.ListenAndServe(conf.Metrics.Address, mux); err != nil {
+				logger.Errorf("metrics server failed: %v", err)
+			}
+		}()
 	}
 
 	go waitForShutdown(p, socketServer, logger)

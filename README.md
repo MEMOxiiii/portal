@@ -44,6 +44,10 @@ Portal supports any combination of backend server software through its TCP socke
 - **Resource Pack Hot Reload** — Reload proxy resource packs for new connections without restarting Portal
 - **Whitelist** — Built-in whitelist support
 - **Latency Reporting** — Real-time player latency tracking sent to backend servers
+- **Server Groups & Draining** — Route players into named server pools with fallback chains, and drain a server ahead of a restart without dropping it from the registry
+- **IP Guard** — Static IP bans and per-IP connection rate limiting at the player listener
+- **Metrics** — Optional Prometheus-compatible `/metrics` endpoint for player counts, transfers and socket clients
+- **Graceful Shutdown** — Clean disconnects and listener shutdown on SIGINT/SIGTERM
 - **Lightweight** — Minimal resource footprint, written in Go
 
 ## Installation
@@ -91,6 +95,10 @@ On first run, a `config.json` file is generated. Here's the full reference:
     "report": true,
     "update_interval": 5
   },
+  "metrics": {
+    "enabled": false,
+    "address": ":9131"
+  },
   "security": {
     "banned_ips": [],
     "rate_limit": {
@@ -136,6 +144,8 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | `logger.level` | Minimum log level (`debug`, `info`, `warn`, `error`) | `info` |
 | `player_latency.report` | Send player latency to backend servers | `true` |
 | `player_latency.update_interval` | Latency report interval in seconds | `5` |
+| `metrics.enabled` | Serve Prometheus-style metrics at `http://<metrics.address>/metrics` | `false` |
+| `metrics.address` | Address the metrics HTTP endpoint listens on | `:9131` |
 | `security.banned_ips` | IP addresses that are always rejected at the player listener | `[]` |
 | `security.rate_limit.enabled` | Reject an IP once it connects too frequently | `true` |
 | `security.rate_limit.window_seconds` | Size of the sliding window connection attempts are counted over | `10` |
