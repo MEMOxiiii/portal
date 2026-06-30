@@ -91,6 +91,10 @@ On first run, a `config.json` file is generated. Here's the full reference:
     "report": true,
     "update_interval": 5
   },
+  "routing": {
+    "default_group": "",
+    "fallback_groups": []
+  },
   "whitelist": {
     "enabled": false,
     "players": []
@@ -124,6 +128,8 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | `logger.level` | Minimum log level (`debug`, `info`, `warn`, `error`) | `info` |
 | `player_latency.report` | Send player latency to backend servers | `true` |
 | `player_latency.update_interval` | Latency report interval in seconds | `5` |
+| `routing.default_group` | Server group new players are load balanced into on join. Empty = balance across every registered server, ignoring groups | `""` |
+| `routing.fallback_groups` | Ordered list of groups to try if `default_group` has no available (non-draining) servers | `[]` |
 | `whitelist.enabled` | Enable username whitelist | `false` |
 | `whitelist.players` | Array of whitelisted usernames | `[]` |
 | `resource_packs.required` | Require resource pack download | `false` |
@@ -180,6 +186,13 @@ Portal communicates with backend servers via a binary TCP protocol:
 | `0x09` | FindPlayerRequest | Server → Proxy | Find player on network |
 | `0x0A` | FindPlayerResponse | Proxy → Server | Player location result |
 | `0x0B` | UpdatePlayerLatency | Proxy → Server | Player latency update |
+| `0x0C` | SetServerDraining | Server → Proxy | Mark/unmark the server as draining for load balancing |
+
+`RegisterServer` also carries a `Group` string field. Servers registering with the same group name are
+treated as a pool by a `GroupedLoadBalancer` (see `routing.default_group`/`routing.fallback_groups` above).
+A draining server (set via `SetServerDraining`) is skipped by both the built-in `SplitLoadBalancer` and
+`GroupedLoadBalancer` when picking a server for a newly joining player, while players already on it are
+unaffected — useful for taking a server out of rotation ahead of a restart.
 
 ## Quick Start Example
 

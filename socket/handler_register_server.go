@@ -11,7 +11,7 @@ type RegisterServerHandler struct{ requireAuth }
 // Handle ...
 func (*RegisterServerHandler) Handle(p packet.Packet, srv Server, c *Client) error {
 	pk := p.(*packet.RegisterServer)
-	srv.ServerRegistry().AddServer(server.New(c.Name(), pk.Address, pk.LegacyAuth))
-	srv.Logger().Debugf("socket connection \"%s\" has registered itself as a server with the address \"%s\" (legacyAuth=%v)", c.Name(), pk.Address, pk.LegacyAuth)
+	srv.ServerRegistry().AddServer(server.New(c.Name(), pk.Address, pk.Group, pk.LegacyAuth))
+	srv.Logger().Debugf("socket connection \"%s\" has registered itself as a server with the address \"%s\" (group=%q, legacyAuth=%v)", c.Name(), pk.Address, pk.Group, pk.LegacyAuth)
 	return nil
 }

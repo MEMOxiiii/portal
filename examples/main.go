@@ -70,6 +70,9 @@ func main() {
 
 		Whitelist: session.NewSimpleWhitelist(conf.Whitelist.Enabled, conf.Whitelist.Players),
 	})
+	if conf.Routing.DefaultGroup != "" {
+		p.SetLoadBalancer(session.NewGroupedLoadBalancer(p.ServerRegistry(), conf.Routing.DefaultGroup, conf.Routing.FallbackGroups...))
+	}
 	if err := p.Listen(); err != nil {
 		logger.Fatalf("failed to listen on %s: %v", conf.Network.Address, err)
 	}

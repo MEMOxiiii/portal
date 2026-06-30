@@ -8,16 +8,20 @@ import (
 type Server struct {
 	name       string
 	address    string
+	group      string
 	legacyAuth bool
 
+	draining    atomic.Bool
 	playerCount atomic.Int64
 }
 
-// New creates a new Server with the provided name, address and legacy auth setting.
-func New(name, address string, legacyAuth bool) *Server {
+// New creates a new Server with the provided name, address, group and legacy auth setting. Group may be
+// empty if the server does not belong to a named group.
+func New(name, address, group string, legacyAuth bool) *Server {
 	s := &Server{
 		name:       name,
 		address:    address,
+		group:      group,
 		legacyAuth: legacyAuth,
 	}
 
@@ -38,6 +42,23 @@ func (s *Server) Address() string {
 // LegacyAuth returns whether the proxy should use legacy authentication when dialing this server.
 func (s *Server) LegacyAuth() bool {
 	return s.legacyAuth
+}
+
+// Group returns the group the server was registered with. It may be empty if the server does not belong
+// to a named group.
+func (s *Server) Group() string {
+	return s.group
+}
+
+// Draining returns whether the server is currently draining. A draining server should not receive any new
+// players from load balancing, but players already connected to it are unaffected.
+func (s *Server) Draining() bool {
+	return s.draining.Load()
+}
+
+// SetDraining sets whether the server is currently draining.
+func (s *Server) SetDraining(v bool) {
+	s.draining.Store(v)
 }
 
 // IncrementPlayerCount increments the player count of the server.

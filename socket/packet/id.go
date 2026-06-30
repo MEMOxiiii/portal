@@ -18,4 +18,5 @@ const (
 	IDFindPlayerResponse
 	IDUpdatePlayerLatency
 	IDDisconnectPlayer
+	IDSetServerDraining
 )

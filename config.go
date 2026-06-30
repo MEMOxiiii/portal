@@ -57,6 +57,16 @@ type Config struct {
 		// UpdateInterval is the interval to report a player's ping if Report is true.
 		UpdateInterval int `json:"update_interval"`
 	} `json:"player_latency"`
+	// Routing holds settings related to how players are load balanced onto groups of backend servers.
+	Routing struct {
+		// DefaultGroup is the server group new players are load balanced into when they first join the
+		// proxy. If left empty, players are load balanced across every registered server regardless of
+		// group.
+		DefaultGroup string `json:"default_group"`
+		// FallbackGroups is an ordered list of groups to try, in order, if DefaultGroup has no available
+		// (non-draining) servers.
+		FallbackGroups []string `json:"fallback_groups"`
+	} `json:"routing"`
 	// Whitelist holds settings related to the proxy whitelist.
 	Whitelist struct {
 		// Enabled is if the whitelist is enabled.
