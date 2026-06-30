@@ -2,6 +2,7 @@ package portal
 
 import (
 	"fmt"
+	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
@@ -22,6 +23,7 @@ type Portal struct {
 	loadBalancer   session.LoadBalancer
 	whitelist      session.Whitelist
 	ipGuard        session.IPGuard
+	events         *event.Bus
 }
 
 // New instantiates portal using the provided options and returns it. If some options are not set, default
@@ -51,7 +53,14 @@ func New(opts Options) *Portal {
 		loadBalancer:   opts.LoadBalancer,
 		whitelist:      opts.Whitelist,
 		ipGuard:        opts.IPGuard,
+		events:         event.NewBus(),
 	}
+}
+
+// Events returns the proxy-wide event bus, which can be used to subscribe to occurrences such as players
+// joining/quitting, servers registering, and transfers completing, without needing to fork the proxy.
+func (p *Portal) Events() *event.Bus {
+	return p.events
 }
 
 // Logger returns the global logger used by the proxy.
@@ -112,7 +121,7 @@ func (p *Portal) Accept() (*session.Session, error) {
 		_ = p.Disconnect(c, m)
 		return nil, fmt.Errorf("player is not whitelisted: %s", m)
 	}
-	return session.New(c, p.sessionStore, p.loadBalancer, p.log)
+	return session.New(c, p.sessionStore, p.loadBalancer, p.log, p.events)
 }
 
 // Disconnect disconnects a Minecraft Conn passed by first sending a disconnect with the message passed, and

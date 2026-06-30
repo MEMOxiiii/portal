@@ -29,6 +29,7 @@ type Session struct {
 	log   internal.Logger
 	conn  *minecraft.Conn
 	store *Store
+	bus   *event.Bus
 
 	hMutex sync.RWMutex
 	// h holds the current handler of the session.
@@ -54,12 +55,14 @@ type Session struct {
 	once         sync.Once
 }
 
-// New creates a new Session with the provided connection.
-func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log internal.Logger) (s *Session, err error) {
+// New creates a new Session with the provided connection. bus may be nil, in which case no events are
+// published for the session's lifecycle.
+func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log internal.Logger, bus *event.Bus) (s *Session, err error) {
 	s = &Session{
 		log:   log,
 		conn:  conn,
 		store: store,
+		bus:   bus,
 
 		entities:    i64set.New(),
 		playerList:  b16set.New(),
@@ -101,6 +104,9 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 			return
 		}
 		log.Infof("%s has been connected to server %s", conn.IdentityData().DisplayName, srv.Name())
+		if s.bus != nil {
+			s.bus.Publish(event.TopicPlayerJoin, event.PlayerPayload{UUID: s.uuid, Name: conn.IdentityData().DisplayName})
+		}
 
 		s.translator = newTranslator(srvConn.GameData())
 		handlePackets(s)
@@ -203,9 +209,22 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		return errors.New("already being transferred")
 	}
 
-	s.log.Infof("%s is being transferred from %s to %s", s.conn.IdentityData().DisplayName, s.Server().Name(), srv.Name())
+	fromName := s.Server().Name()
+	s.log.Infof("%s is being transferred from %s to %s", s.conn.IdentityData().DisplayName, fromName, srv.Name())
 
 	start := time.Now()
+	publishTransfer := func(transferErr error) {
+		metrics.Default.RecordTransfer(transferErr == nil, time.Since(start))
+		if s.bus != nil {
+			s.bus.Publish(event.TopicTransfer, event.TransferPayload{
+				PlayerName: s.conn.IdentityData().DisplayName,
+				FromServer: fromName,
+				ToServer:   srv.Name(),
+				Err:        transferErr,
+			})
+		}
+	}
+
 	ctx := event.C()
 	s.handler().HandleTransfer(ctx, srv)
 
@@ -241,7 +260,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			if err != nil {
 				s.log.Errorf("transfer failed: could not dial %s: %v", srv.Name(), err)
 				s.setTransferring(false)
-				metrics.Default.RecordTransfer(false, time.Since(start))
+				publishTransfer(err)
 				return
 			}
 		}
@@ -249,7 +268,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			_ = conn.Close()
 			s.log.Errorf("transfer failed: spawn timeout on %s: %v", srv.Name(), err)
 			s.setTransferring(false)
-			metrics.Default.RecordTransfer(false, time.Since(start))
+			publishTransfer(err)
 			return
 		}
 
@@ -296,7 +315,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		s.server.IncrementPlayerCount()
 		s.serverMu.Unlock()
 
-		metrics.Default.RecordTransfer(true, time.Since(start))
+		publishTransfer(nil)
 	})
 
 	ctx.Stop(func() {
@@ -328,6 +347,10 @@ func (s *Session) Close() {
 	s.once.Do(func() {
 		s.handler().HandleQuit()
 		s.Handle(NopHandler{})
+
+		if s.bus != nil {
+			s.bus.Publish(event.TopicPlayerQuit, event.PlayerPayload{UUID: s.uuid, Name: s.conn.IdentityData().DisplayName})
+		}
 
 		s.store.Delete(s.UUID())
 

@@ -2,6 +2,7 @@ package socket
 
 import (
 	"crypto/tls"
+	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
@@ -41,6 +42,10 @@ type Server interface {
 	// ServerRegistry returns the registry used to store available servers on the proxy.
 	ServerRegistry() *server.Registry
 
+	// Events returns the event bus used to publish proxy-wide occurrences, such as servers
+	// registering/unregistering. It may be nil if no bus was configured.
+	Events() *event.Bus
+
 	// Close closes the socket server's listener, preventing it from accepting any further connections.
 	Close() error
 }
@@ -63,10 +68,12 @@ type DefaultServer struct {
 
 	sessionStore   *session.Store
 	serverRegistry *server.Registry
+	events         *event.Bus
 }
 
-// NewDefaultServer creates a new default server to be used for accepting socket connections.
-func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool) *DefaultServer {
+// NewDefaultServer creates a new default server to be used for accepting socket connections. events may be
+// nil, in which case no events are published for server registration/unregistration.
+func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool, events *event.Bus) *DefaultServer {
 	return &DefaultServer{
 		log: log,
 
@@ -80,13 +87,14 @@ func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRe
 
 		sessionStore:   sessionStore,
 		serverRegistry: serverRegistry,
+		events:         events,
 	}
 }
 
 // NewDefaultTLSServer creates a new default server which serves the communication socket over TLS using the
 // provided certificate. Backend servers must dial using TLS in order to connect.
-func NewDefaultTLSServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool, tlsConfig *tls.Config) *DefaultServer {
-	s := NewDefaultServer(addr, secret, sessionStore, serverRegistry, log, readerLimits)
+func NewDefaultTLSServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool, tlsConfig *tls.Config, events *event.Bus) *DefaultServer {
+	s := NewDefaultServer(addr, secret, sessionStore, serverRegistry, log, readerLimits, events)
 	s.tlsConfig = tlsConfig
 	return s
 }
@@ -180,6 +188,9 @@ func (s *DefaultServer) handleClientDisconnect(c *Client) {
 	if ok {
 		s.serverRegistry.RemoveServer(srv)
 		s.log.Debugf("removed server for socket connection \"%s\"", c.Name())
+		if s.events != nil {
+			s.events.Publish(event.TopicServerUnregistered, event.ServerPayload{Name: srv.Name(), Address: srv.Address()})
+		}
 	}
 }
 
@@ -238,6 +249,11 @@ func (s *DefaultServer) SessionStore() *session.Store {
 // ServerRegistry ...
 func (s *DefaultServer) ServerRegistry() *server.Registry {
 	return s.serverRegistry
+}
+
+// Events ...
+func (s *DefaultServer) Events() *event.Bus {
+	return s.events
 }
 
 // Close ...

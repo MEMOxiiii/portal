@@ -44,6 +44,7 @@ Portal supports any combination of backend server software through its TCP socke
 - **Resource Pack Hot Reload** — Reload proxy resource packs for new connections without restarting Portal
 - **Whitelist** — Built-in whitelist support
 - **Latency Reporting** — Real-time player latency tracking sent to backend servers
+- **Event Bus** — Subscribe to player join/quit, server register/unregister and transfer events via `Portal.Events()` without forking the proxy
 - **Server Groups & Draining** — Route players into named server pools with fallback chains, and drain a server ahead of a restart without dropping it from the registry
 - **IP Guard** — Static IP bans and per-IP connection rate limiting at the player listener
 - **Metrics** — Optional Prometheus-compatible `/metrics` endpoint for player counts, transfers and socket clients
@@ -242,6 +243,26 @@ func main() {
     select {}
 }
 ```
+
+## Event Bus
+
+`Portal.Events()` exposes a proxy-wide event bus you can subscribe to without forking the proxy:
+
+```go
+p.Events().Subscribe(event.TopicPlayerJoin, func(payload any) {
+    p := payload.(event.PlayerPayload)
+    log.Infof("%s joined the network", p.Name)
+})
+
+p.Events().Subscribe(event.TopicTransfer, func(payload any) {
+    t := payload.(event.TransferPayload)
+    if t.Err != nil {
+        log.Errorf("%s failed to transfer from %s to %s: %v", t.PlayerName, t.FromServer, t.ToServer, t.Err)
+    }
+})
+```
+
+Available topics: `TopicPlayerJoin`, `TopicPlayerQuit`, `TopicServerRegistered`, `TopicServerUnregistered`, `TopicTransfer`.
 
 ## Client Libraries
 

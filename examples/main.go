@@ -91,9 +91,9 @@ func main() {
 		if err != nil {
 			logger.Fatalf("unable to load communication TLS certificate: %v", err)
 		}
-		socketServer = socket.NewDefaultTLSServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits, &tls.Config{Certificates: []tls.Certificate{cert}})
+		socketServer = socket.NewDefaultTLSServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits, &tls.Config{Certificates: []tls.Certificate{cert}}, p.Events())
 	} else {
-		socketServer = socket.NewDefaultServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits)
+		socketServer = socket.NewDefaultServer(conf.Network.Communication.Address, conf.Network.Communication.Secret, p.SessionStore(), p.ServerRegistry(), logger, conf.Network.ReaderLimits, p.Events())
 	}
 	if err := socketServer.Listen(); err != nil {
 		p.Logger().Fatalf("socket server failed to listen: %v", err)
