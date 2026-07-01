@@ -237,6 +237,9 @@ func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, clust
 	<-sig
 
 	logger.Infof("shutting down...")
+	if err := p.Close(); err != nil {
+		logger.Errorf("failed to close proxy listener: %v", err)
+	}
 	for _, s := range p.SessionStore().All() {
 		if clusterBackend != nil {
 			_ = clusterBackend.Remove(clusterProxyID, s.Conn().IdentityData().DisplayName)
@@ -250,9 +253,6 @@ func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, clust
 	}
 	if err := socketServer.Close(); err != nil {
 		logger.Errorf("failed to close socket server: %v", err)
-	}
-	if err := p.Close(); err != nil {
-		logger.Errorf("failed to close proxy listener: %v", err)
 	}
 	logger.Infof("shutdown complete")
 	os.Exit(0)
