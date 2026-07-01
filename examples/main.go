@@ -168,18 +168,22 @@ func main() {
 			}
 		})
 
-		go func() {
-			ticker := time.NewTicker(ttl / 2)
-			defer ticker.Stop()
-			for range ticker.C {
-				for _, s := range p.SessionStore().All() {
-					name := s.Conn().IdentityData().DisplayName
-					if err := clusterBackend.Announce(clusterProxyID, name, s.Server().Name()); err != nil {
-						logger.Errorf("cluster heartbeat failed for %s: %v", name, err)
+		if ttl <= 0 {
+			logger.Errorf("cluster.ttl_seconds must be positive; skipping periodic re-announce heartbeat")
+		} else {
+			go func() {
+				ticker := time.NewTicker(ttl / 2)
+				defer ticker.Stop()
+				for range ticker.C {
+					for _, s := range p.SessionStore().All() {
+						name := s.Conn().IdentityData().DisplayName
+						if err := clusterBackend.Announce(clusterProxyID, name, s.Server().Name()); err != nil {
+							logger.Errorf("cluster heartbeat failed for %s: %v", name, err)
+						}
 					}
 				}
-			}
-		}()
+			}()
+		}
 
 		logger.Infof("cluster presence sharing enabled (proxy id %q)", clusterProxyID)
 	}
