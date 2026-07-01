@@ -1,6 +1,9 @@
 package event
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 // Bus is a simple synchronous publish/subscribe event bus used to notify interested code of proxy-wide
 // occurrences (players joining/quitting, servers registering, transfers completing, etc.) without requiring
@@ -24,11 +27,24 @@ func (b *Bus) Subscribe(topic string, fn func(payload any)) {
 	b.handlers[topic] = append(b.handlers[topic], fn)
 }
 
-// Publish calls every handler subscribed to topic with the provided payload.
+// Publish calls every handler subscribed to topic with the provided payload. Handlers are invoked outside
+// of the bus's lock and each is individually recovered, so a handler that panics or calls Subscribe/Publish
+// on the same bus can't crash the caller or self-deadlock the bus.
 func (b *Bus) Publish(topic string, payload any) {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
-	for _, fn := range b.handlers[topic] {
-		fn(payload)
+	handlers := append([]func(any){}, b.handlers[topic]...)
+	b.mu.RUnlock()
+
+	for _, fn := range handlers {
+		b.call(fn, payload)
 	}
+}
+
+func (b *Bus) call(fn func(payload any), payload any) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("event: handler panicked: %v", r)
+		}
+	}()
+	fn(payload)
 }
