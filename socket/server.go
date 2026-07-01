@@ -2,6 +2,7 @@ package socket
 
 import (
 	"crypto/tls"
+	"errors"
 	"github.com/paroxity/portal/cluster"
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
@@ -124,6 +125,9 @@ func (s *DefaultServer) Listen() error {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
 				s.log.Infof("socket server unable to accept connection: %v", err)
 				continue
 			}
@@ -151,6 +155,7 @@ func (s *DefaultServer) handleClient(c *Client) {
 	for {
 		if !c.Authenticated() && s.AuthBlocked(c.conn.RemoteAddr()) {
 			s.log.Debugf("closing socket connection from %s: too many failed authentication attempts", c.conn.RemoteAddr())
+			_ = c.Close()
 			return
 		}
 
