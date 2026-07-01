@@ -2,6 +2,7 @@ package portal
 
 import (
 	"fmt"
+	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
@@ -21,6 +22,8 @@ type Portal struct {
 	serverRegistry *server.Registry
 	loadBalancer   session.LoadBalancer
 	whitelist      session.Whitelist
+	ipGuard        session.IPGuard
+	events         *event.Bus
 }
 
 // New instantiates portal using the provided options and returns it. If some options are not set, default
@@ -36,6 +39,9 @@ func New(opts Options) *Portal {
 	if opts.Whitelist == nil {
 		opts.Whitelist = session.NewSimpleWhitelist(false, []string{})
 	}
+	if opts.IPGuard == nil {
+		opts.IPGuard = session.NopIPGuard{}
+	}
 	return &Portal{
 		log: opts.Logger,
 
@@ -46,7 +52,15 @@ func New(opts Options) *Portal {
 		serverRegistry: serverRegistry,
 		loadBalancer:   opts.LoadBalancer,
 		whitelist:      opts.Whitelist,
+		ipGuard:        opts.IPGuard,
+		events:         event.NewBus(),
 	}
+}
+
+// Events returns the proxy-wide event bus, which can be used to subscribe to occurrences such as players
+// joining/quitting, servers registering, and transfers completing, without needing to fork the proxy.
+func (p *Portal) Events() *event.Bus {
+	return p.events
 }
 
 // Logger returns the global logger used by the proxy.
@@ -99,11 +113,15 @@ func (p *Portal) Accept() (*session.Session, error) {
 		return nil, err
 	}
 	c := conn.(*minecraft.Conn)
+	if ok, m := p.ipGuard.Allow(c.RemoteAddr()); !ok {
+		_ = p.Disconnect(c, m)
+		return nil, fmt.Errorf("connection rejected by IP guard: %s", m)
+	}
 	if ok, m := p.whitelist.Authorize(c); !ok {
 		_ = p.Disconnect(c, m)
 		return nil, fmt.Errorf("player is not whitelisted: %s", m)
 	}
-	return session.New(c, p.sessionStore, p.loadBalancer, p.log)
+	return session.New(c, p.sessionStore, p.loadBalancer, p.log, p.events)
 }
 
 // Disconnect disconnects a Minecraft Conn passed by first sending a disconnect with the message passed, and
@@ -114,4 +132,13 @@ func (p *Portal) Disconnect(conn *minecraft.Conn, message string) error {
 		return fmt.Errorf("no listener to disconnect connection")
 	}
 	return p.listener.Disconnect(conn, message)
+}
+
+// Close closes the proxy's listener, preventing it from accepting any further player connections. It does
+// not close any of the sessions already connected; callers are expected to disconnect them beforehand.
+func (p *Portal) Close() error {
+	if p.listener == nil {
+		return nil
+	}
+	return p.listener.Close()
 }

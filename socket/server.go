@@ -1,6 +1,10 @@
 package socket
 
 import (
+	"crypto/tls"
+	"errors"
+	"github.com/paroxity/portal/cluster"
+	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
@@ -28,10 +32,28 @@ type Server interface {
 	// name is not in use, unless called by places other than the socket server.
 	Authenticate(c *Client, name string)
 
+	// AuthBlocked returns whether the remote address has failed authentication too many times recently and
+	// is temporarily blocked from authenticating.
+	AuthBlocked(addr net.Addr) bool
+	// RecordAuthFailure records a failed authentication attempt from the remote address, which may cause it
+	// to become temporarily blocked.
+	RecordAuthFailure(addr net.Addr)
+
 	// SessionStore returns the store used to hold the open sessions on the proxy.
 	SessionStore() *session.Store
 	// ServerRegistry returns the registry used to store available servers on the proxy.
 	ServerRegistry() *server.Registry
+
+	// Events returns the event bus used to publish proxy-wide occurrences, such as servers
+	// registering/unregistering. It may be nil if no bus was configured.
+	Events() *event.Bus
+
+	// Cluster returns the cross-proxy presence backend used to look up players connected to other proxies
+	// in the same cluster. It may be nil if clustering is not configured.
+	Cluster() cluster.Backend
+
+	// Close closes the socket server's listener, preventing it from accepting any further connections.
+	Close() error
 }
 
 // DefaultServer represents a basic TCP socket server implementation. It allows external connections to
@@ -42,6 +64,8 @@ type DefaultServer struct {
 	addr         string
 	secret       string
 	readerLimits bool
+	tlsConfig    *tls.Config
+	authThrottle *authThrottle
 
 	listener           net.Listener
 	clientsMu          sync.RWMutex
@@ -50,28 +74,47 @@ type DefaultServer struct {
 
 	sessionStore   *session.Store
 	serverRegistry *server.Registry
+	events         *event.Bus
+	cluster        cluster.Backend
 }
 
-// NewDefaultServer creates a new default server to be used for accepting socket connections.
-func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool) *DefaultServer {
+// NewDefaultServer creates a new default server to be used for accepting socket connections. events may be
+// nil, in which case no events are published for server registration/unregistration.
+func NewDefaultServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool, events *event.Bus) *DefaultServer {
 	return &DefaultServer{
 		log: log,
 
 		addr:         addr,
 		secret:       secret,
 		readerLimits: readerLimits,
+		authThrottle: newAuthThrottle(),
 
 		clients:            make(map[string]*Client),
 		unconnectedClients: make(map[net.Addr]*Client),
 
 		sessionStore:   sessionStore,
 		serverRegistry: serverRegistry,
+		events:         events,
 	}
+}
+
+// NewDefaultTLSServer creates a new default server which serves the communication socket over TLS using the
+// provided certificate. Backend servers must dial using TLS in order to connect.
+func NewDefaultTLSServer(addr, secret string, sessionStore *session.Store, serverRegistry *server.Registry, log internal.Logger, readerLimits bool, tlsConfig *tls.Config, events *event.Bus) *DefaultServer {
+	s := NewDefaultServer(addr, secret, sessionStore, serverRegistry, log, readerLimits, events)
+	s.tlsConfig = tlsConfig
+	return s
 }
 
 // Listen ...
 func (s *DefaultServer) Listen() error {
-	listener, err := net.Listen("tcp", s.addr)
+	var listener net.Listener
+	var err error
+	if s.tlsConfig != nil {
+		listener, err = tls.Listen("tcp", s.addr, s.tlsConfig)
+	} else {
+		listener, err = net.Listen("tcp", s.addr)
+	}
 	if err != nil {
 		return err
 	}
@@ -82,6 +125,9 @@ func (s *DefaultServer) Listen() error {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
 				s.log.Infof("socket server unable to accept connection: %v", err)
 				continue
 			}
@@ -95,12 +141,24 @@ func (s *DefaultServer) Listen() error {
 
 // handleClient handles a client that has been accepted from the socket server.
 func (s *DefaultServer) handleClient(c *Client) {
+	if s.AuthBlocked(c.conn.RemoteAddr()) {
+		s.log.Debugf("rejected socket connection from %s: too many failed authentication attempts", c.conn.RemoteAddr())
+		_ = c.Close()
+		return
+	}
+
 	defer s.handleClientDisconnect(c)
 	s.clientsMu.Lock()
 	s.unconnectedClients[c.conn.RemoteAddr()] = c
 	s.clientsMu.Unlock()
 
 	for {
+		if !c.Authenticated() && s.AuthBlocked(c.conn.RemoteAddr()) {
+			s.log.Debugf("closing socket connection from %s: too many failed authentication attempts", c.conn.RemoteAddr())
+			_ = c.Close()
+			return
+		}
+
 		pk, err := c.ReadPacket()
 		if err != nil {
 			if containsAny(err.Error(), "EOF", "closed") {
@@ -141,6 +199,9 @@ func (s *DefaultServer) handleClientDisconnect(c *Client) {
 	if ok {
 		s.serverRegistry.RemoveServer(srv)
 		s.log.Debugf("removed server for socket connection \"%s\"", c.Name())
+		if s.events != nil {
+			s.events.Publish(event.TopicServerUnregistered, event.ServerPayload{Name: srv.Name(), Address: srv.Address()})
+		}
 	}
 }
 
@@ -181,6 +242,16 @@ func (s *DefaultServer) Authenticate(c *Client, name string) {
 	c.Authenticate(name)
 }
 
+// AuthBlocked ...
+func (s *DefaultServer) AuthBlocked(addr net.Addr) bool {
+	return s.authThrottle.Blocked(addr)
+}
+
+// RecordAuthFailure ...
+func (s *DefaultServer) RecordAuthFailure(addr net.Addr) {
+	s.authThrottle.RecordFailure(addr)
+}
+
 // SessionStore ...
 func (s *DefaultServer) SessionStore() *session.Store {
 	return s.sessionStore
@@ -189,6 +260,30 @@ func (s *DefaultServer) SessionStore() *session.Store {
 // ServerRegistry ...
 func (s *DefaultServer) ServerRegistry() *server.Registry {
 	return s.serverRegistry
+}
+
+// Events ...
+func (s *DefaultServer) Events() *event.Bus {
+	return s.events
+}
+
+// Cluster ...
+func (s *DefaultServer) Cluster() cluster.Backend {
+	return s.cluster
+}
+
+// SetCluster sets the cross-proxy presence backend used to look up players connected to other proxies in
+// the same cluster. Passing nil disables cluster lookups.
+func (s *DefaultServer) SetCluster(c cluster.Backend) {
+	s.cluster = c
+}
+
+// Close ...
+func (s *DefaultServer) Close() error {
+	if s.listener == nil {
+		return nil
+	}
+	return s.listener.Close()
 }
 
 // containsAny checks if the string contains any of the provided sub strings.

@@ -13,19 +13,33 @@ func (*FindPlayerRequestHandler) Handle(p packet.Packet, srv Server, c *Client) 
 	s, ok := srv.SessionStore().Load(pk.PlayerUUID)
 	if !ok {
 		s, ok = srv.SessionStore().LoadFromName(pk.PlayerName)
-		if !ok {
+	}
+	if ok {
+		return c.WritePacket(&packet.FindPlayerResponse{
+			PlayerUUID: s.UUID(),
+			PlayerName: s.Conn().IdentityData().DisplayName,
+			Online:     true,
+			Server:     s.Server().Name(),
+		})
+	}
+
+	if cl := srv.Cluster(); cl != nil && pk.PlayerName != "" {
+		if proxyID, serverName, online, err := cl.Lookup(pk.PlayerName); err != nil {
+			srv.Logger().Errorf("cluster lookup failed for %q: %v", pk.PlayerName, err)
+		} else if online {
 			return c.WritePacket(&packet.FindPlayerResponse{
 				PlayerUUID: pk.PlayerUUID,
 				PlayerName: pk.PlayerName,
-				Online:     false,
+				Online:     true,
+				Server:     serverName,
+				Proxy:      proxyID,
 			})
 		}
 	}
 
 	return c.WritePacket(&packet.FindPlayerResponse{
-		PlayerUUID: s.UUID(),
-		PlayerName: s.Conn().IdentityData().DisplayName,
-		Online:     true,
-		Server:     s.Server().Name(),
+		PlayerUUID: pk.PlayerUUID,
+		PlayerName: pk.PlayerName,
+		Online:     false,
 	})
 }

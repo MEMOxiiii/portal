@@ -24,4 +24,8 @@ type Options struct {
 
 	// Whitelist is used to limit the proxy to only allow certain players to join.
 	Whitelist session.Whitelist
+
+	// IPGuard is used to reject connections from banned or abusive IP addresses before they reach the
+	// whitelist or game-layer authentication.
+	IPGuard session.IPGuard
 }

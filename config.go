@@ -26,6 +26,16 @@ type Config struct {
 			// Secret is the authentication secret required by external connections in order to authenticate
 			// to the proxy and start communicating.
 			Secret string `json:"secret"`
+			// TLS holds settings to encrypt the communication socket. When enabled, backend servers must
+			// connect using TLS as well.
+			TLS struct {
+				// Enabled determines whether the communication socket should be served over TLS.
+				Enabled bool `json:"enabled"`
+				// CertFile is the path to the PEM encoded certificate file.
+				CertFile string `json:"cert_file"`
+				// KeyFile is the path to the PEM encoded private key file.
+				KeyFile string `json:"key_file"`
+			} `json:"tls"`
 		} `json:"communication"`
 		// ReaderLimits determines if things like slices will have a maximum length as they are read from socket clients.
 		// It is recommended that this is always set to true in order to prevent possible attack vectors, however if any
@@ -47,6 +57,72 @@ type Config struct {
 		// UpdateInterval is the interval to report a player's ping if Report is true.
 		UpdateInterval int `json:"update_interval"`
 	} `json:"player_latency"`
+	// Cluster holds settings related to sharing player presence across multiple Portal instances, allowing
+	// FindPlayerRequest to resolve players connected to a different proxy in the cluster.
+	Cluster struct {
+		// Enabled determines whether cluster presence sharing is active.
+		Enabled bool `json:"enabled"`
+		// ProxyID identifies this proxy instance to the rest of the cluster. If left empty, the machine's
+		// hostname is used.
+		ProxyID string `json:"proxy_id"`
+		// TTLSeconds is how long a player's presence record survives in the backend without being
+		// refreshed before it is treated as stale. Acts as a safety net if a proxy crashes without
+		// cleanly removing its players.
+		TTLSeconds int `json:"ttl_seconds"`
+		// Redis holds the connection settings for the Redis-backed cluster backend.
+		Redis struct {
+			// Address is the address of the Redis server, in the format "host:port".
+			Address string `json:"address"`
+			// Password is the password used to authenticate to Redis, if required.
+			Password string `json:"password"`
+			// DB is the Redis logical database index to use.
+			DB int `json:"db"`
+		} `json:"redis"`
+	} `json:"cluster"`
+	// Metrics holds settings related to exposing Prometheus-style metrics over HTTP.
+	Metrics struct {
+		// Enabled determines whether the metrics HTTP endpoint should be served.
+		Enabled bool `json:"enabled"`
+		// Address is the address the metrics endpoint listens on, serving the metrics at "/metrics".
+		Address string `json:"address"`
+	} `json:"metrics"`
+	// Security holds settings related to protecting the proxy's player listener from abusive connections.
+	Security struct {
+		// BannedIPs is a list of IP addresses that are never allowed to connect to the proxy.
+		BannedIPs []string `json:"banned_ips"`
+		// RateLimit holds settings to limit how often a single IP may attempt to connect.
+		RateLimit struct {
+			// Enabled determines whether connection rate limiting is active.
+			Enabled bool `json:"enabled"`
+			// WindowSeconds is the size, in seconds, of the sliding window attempts are counted over.
+			WindowSeconds int `json:"window_seconds"`
+			// MaxAttempts is the maximum number of connection attempts allowed from a single IP within
+			// WindowSeconds before further attempts are rejected.
+			MaxAttempts int `json:"max_attempts"`
+		} `json:"rate_limit"`
+	} `json:"security"`
+	// HealthCheck holds settings related to verifying registered servers are actually reachable, rather
+	// than just registered, before load balancing new players onto them.
+	HealthCheck struct {
+		// Enabled determines whether health checking is active.
+		Enabled bool `json:"enabled"`
+		// IntervalSeconds is how often, in seconds, every registered server is pinged.
+		IntervalSeconds int `json:"interval_seconds"`
+		// TimeoutSeconds is how long to wait for a ping response before considering it failed.
+		TimeoutSeconds int `json:"timeout_seconds"`
+		// FailureThreshold is how many consecutive failed pings mark a server unhealthy.
+		FailureThreshold int `json:"failure_threshold"`
+	} `json:"health_check"`
+	// Routing holds settings related to how players are load balanced onto groups of backend servers.
+	Routing struct {
+		// DefaultGroup is the server group new players are load balanced into when they first join the
+		// proxy. If left empty, players are load balanced across every registered server regardless of
+		// group.
+		DefaultGroup string `json:"default_group"`
+		// FallbackGroups is an ordered list of groups to try, in order, if DefaultGroup has no available
+		// (non-draining) servers.
+		FallbackGroups []string `json:"fallback_groups"`
+	} `json:"routing"`
 	// Whitelist holds settings related to the proxy whitelist.
 	Whitelist struct {
 		// Enabled is if the whitelist is enabled.
@@ -85,6 +161,16 @@ func DefaultConfig() (c Config) {
 	c.Logger.Level = "debug"
 	c.PlayerLatency.Report = true
 	c.PlayerLatency.UpdateInterval = 5
+	c.Security.RateLimit.Enabled = true
+	c.Security.RateLimit.WindowSeconds = 10
+	c.Security.RateLimit.MaxAttempts = 5
+	c.Metrics.Address = ":9131"
+	c.Cluster.TTLSeconds = 300
+	c.Cluster.Redis.Address = "localhost:6379"
+	c.HealthCheck.Enabled = true
+	c.HealthCheck.IntervalSeconds = 10
+	c.HealthCheck.TimeoutSeconds = 3
+	c.HealthCheck.FailureThreshold = 3
 	c.ResourcePacks.Directory = "resource_packs"
 	c.ResourcePacks.HotReload.Interval = 30
 	c.MOTD = "Portal"

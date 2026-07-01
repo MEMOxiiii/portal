@@ -8,6 +8,7 @@ import (
 	"github.com/paroxity/portal/socket/packet"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"go.uber.org/atomic"
+	"io"
 	"net"
 	"sync"
 )
@@ -75,12 +76,8 @@ func (c *Client) ReadPacket() (pk packet.Packet, err error) {
 	}
 
 	data := make([]byte, l)
-	read, err := c.conn.Read(data)
-	if err != nil {
+	if _, err := io.ReadFull(c.conn, data); err != nil {
 		return nil, err
-	}
-	if read != int(l) {
-		return nil, fmt.Errorf("expected %v bytes, got %v", l, read)
 	}
 
 	buf := bytes.NewBuffer(data)

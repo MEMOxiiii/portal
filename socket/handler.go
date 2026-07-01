@@ -27,6 +27,7 @@ func init() {
 	RegisterHandler(packet.IDPlayerInfoRequest, &PlayerInfoRequestHandler{})
 	RegisterHandler(packet.IDServerListRequest, &ServerListRequestHandler{})
 	RegisterHandler(packet.IDFindPlayerRequest, &FindPlayerRequestHandler{})
+	RegisterHandler(packet.IDSetServerDraining, &SetServerDrainingHandler{})
 }
 
 // requireAuth implements the RequiresAuth() method and always returns true.

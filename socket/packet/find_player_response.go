@@ -12,10 +12,14 @@ type FindPlayerResponse struct {
 	PlayerUUID uuid.UUID
 	// PlayerName is the name of the player that has been searched for.
 	PlayerName string
-	// Online is if the player is connected to the proxy.
+	// Online is if the player is connected to the proxy, or to another proxy in the same cluster.
 	Online bool
 	// Server is the server within the group the player is in, if connected.
 	Server string
+	// Proxy is the ID of the proxy the player is connected to. It is empty when the player is connected to
+	// this proxy directly, and only set when the player was found through a cluster.Backend lookup on
+	// another proxy instance.
+	Proxy string
 }
 
 // ID ...
@@ -30,6 +34,7 @@ func (pk *FindPlayerResponse) Marshal(w *protocol.Writer) {
 	w.Bool(&pk.Online)
 	if pk.Online {
 		w.String(&pk.Server)
+		w.String(&pk.Proxy)
 	}
 }
 
@@ -40,5 +45,6 @@ func (pk *FindPlayerResponse) Unmarshal(r *protocol.Reader) {
 	r.Bool(&pk.Online)
 	if pk.Online {
 		r.String(&pk.Server)
+		r.String(&pk.Proxy)
 	}
 }

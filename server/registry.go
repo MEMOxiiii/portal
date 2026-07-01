@@ -36,6 +36,20 @@ func (r *Registry) Servers() (all []*Server) {
 	return
 }
 
+// ServersInGroup returns a slice of all the available servers on the proxy that were registered with the
+// provided group.
+func (r *Registry) ServersInGroup(group string) (servers []*Server) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, srv := range r.servers {
+		if srv.Group() == group {
+			servers = append(servers, srv)
+		}
+	}
+	return
+}
+
 // AddServer adds a server to the register.
 func (r *Registry) AddServer(srv *Server) {
 	r.mu.Lock()
