@@ -81,6 +81,7 @@ On first run, a `config.json` file is generated. Here's the full reference:
 {
   "network": {
     "address": ":19132",
+    "flush_rate_ms": 20,
     "communication": {
       "address": ":19131",
       "secret": "",
@@ -155,6 +156,7 @@ On first run, a `config.json` file is generated. Here's the full reference:
 | Key | Description | Default |
 |:---|:---|:---|
 | `network.address` | Address players connect to (`ip:port`) | `:19132` |
+| `network.flush_rate_ms` | Maximum client-bound packet buffering delay. Lower values reduce relay latency but increase CPU and network writes; `0` uses gophertunnel's default. | `20` |
 | `network.communication.address` | Socket API address for backend servers | `:19131` |
 | `network.communication.secret` | Authentication secret (must match backend configs) | `""` |
 | `network.communication.tls.enabled` | Serve the communication socket over TLS (backends must dial with TLS too) | `false` |

@@ -86,6 +86,7 @@ func handlePackets(s *Session) {
 						})
 
 						w.Wait()
+						_ = s.conn.Flush()
 
 						// Send a Disconnect packet before closing so the downstream server
 						// (e.g. GeyserMC → Spigot) immediately cleans up the player session

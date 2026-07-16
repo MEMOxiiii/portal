@@ -17,6 +17,9 @@ type Config struct {
 		// Address is the address on which the proxy should listen. Players may connect to this address in
 		// order to join. It should be in the format of "ip:port".
 		Address string `json:"address"`
+		// FlushRateMS is the maximum time client-bound packets wait before Portal sends them. Lower values
+		// reduce relay latency at the cost of more frequent compression and network writes.
+		FlushRateMS int `json:"flush_rate_ms"`
 		// Communication holds settings related to the communication aspects of the proxy.
 		Communication struct {
 			// Address is the address on which the communication service should listen. External connections
@@ -155,6 +158,7 @@ type Config struct {
 // DefaultConfig returns a configuration with the default values filled out.
 func DefaultConfig() (c Config) {
 	c.Network.Address = ":19132"
+	c.Network.FlushRateMS = 20
 	c.Network.Communication.Address = ":19131"
 	c.Network.ReaderLimits = true
 	c.Logger.File = "proxy.log"

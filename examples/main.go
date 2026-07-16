@@ -67,6 +67,7 @@ func main() {
 		Address: conf.Network.Address,
 		ListenConfig: minecraft.ListenConfig{
 			StatusProvider: portal.NewMOTDStatusProvider(conf.MOTD).SubMOTD(conf.SubMOTD),
+			FlushRate:      time.Duration(conf.Network.FlushRateMS) * time.Millisecond,
 
 			ResourcePacks:        resourcePackManager.ResourcePacks(),
 			FetchResourcePacks:   resourcePackManager.FetchResourcePacks,
@@ -280,6 +281,9 @@ func readConfig(logger internal.Logger) portal.Config {
 	}
 	if err := json.Unmarshal(data, &c); err != nil {
 		logger.Fatalf("error decoding config: %v", err)
+	}
+	if c.Network.FlushRateMS < 0 {
+		logger.Fatalf("network.flush_rate_ms must not be negative")
 	}
 	return c
 }

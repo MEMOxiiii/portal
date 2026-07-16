@@ -302,6 +302,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 				})
 			}
 		}
+		_ = s.conn.Flush()
 
 		s.serverMu.Lock()
 		s.server.DecrementPlayerCount()
