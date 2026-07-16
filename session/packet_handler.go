@@ -34,7 +34,7 @@ func handlePackets(s *Session) {
 					if s.transferring.Load() {
 						s.serverMu.Lock()
 						gameData := s.tempServerConn.GameData()
-						s.changeDimension(packet.DimensionOverworld, gameData.PlayerPosition)
+						s.changeDimension(gameData.Dimension, gameData.PlayerPosition)
 
 						var w sync.WaitGroup
 						w.Add(2)

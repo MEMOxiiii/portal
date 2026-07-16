@@ -285,13 +285,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		s.tempServerConn = conn
 		s.serverMu.Unlock()
 
-		var proxyDimension int32
-		for _, dimension := range []int32{packet.DimensionOverworld, packet.DimensionNether, packet.DimensionEnd} {
-			if dimension != s.serverConn.GameData().Dimension && dimension != conn.GameData().Dimension {
-				proxyDimension = dimension
-				break
-			}
-		}
+		proxyDimension := selectProxyDimension(s.serverConn.GameData().Dimension, conn.GameData().Dimension)
 
 		pos := s.conn.GameData().PlayerPosition
 		s.changeDimension(proxyDimension, pos)
@@ -302,7 +296,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			for z := int32(-2); z <= 2; z++ {
 				_ = s.conn.WritePacket(&packet.LevelChunk{
 					Position:      protocol.ChunkPos{chunkX + x, chunkZ + z},
-					Dimension:     packet.DimensionNether,
+					Dimension:     proxyDimension,
 					SubChunkCount: 1,
 					RawPayload:    emptyChunk(proxyDimension),
 				})
@@ -445,4 +439,13 @@ func (s *Session) changeDimension(dimension int32, pos mgl32.Vec3) {
 	})
 	_ = s.conn.WritePacket(&packet.StopSound{StopAll: true})
 	_ = s.conn.WritePacket(&packet.PlayerAction{ActionType: protocol.PlayerActionDimensionChangeDone})
+}
+
+func selectProxyDimension(source, target int32) int32 {
+	for _, dimension := range []int32{packet.DimensionOverworld, packet.DimensionNether, packet.DimensionEnd} {
+		if dimension != source && dimension != target {
+			return dimension
+		}
+	}
+	return packet.DimensionOverworld
 }
