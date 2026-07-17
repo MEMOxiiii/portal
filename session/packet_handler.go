@@ -30,12 +30,6 @@ func handlePackets(s *Session) {
 			switch pk := pk.(type) {
 			case *packet.PlayerAction:
 				if pk.ActionType == protocol.PlayerActionDimensionChangeDone {
-					if s.postTransfer.CAS(true, false) {
-						s.transferring.Store(false)
-						s.log.Infof("%s finished transferring to %s", s.Conn().IdentityData().DisplayName, s.Server().Name())
-						s.completeTransfer(nil)
-						continue
-					}
 					if s.transferring.Load() {
 						s.serverMu.Lock()
 						gameData := s.tempServerConn.GameData()
@@ -104,9 +98,13 @@ func handlePackets(s *Session) {
 
 						s.updateTranslatorData(gameData)
 
+						s.transferring.Store(false)
 						s.postTransfer.Store(true)
 
-						s.log.Debugf("%s connected to %s; waiting for client dimension confirmation", s.Conn().IdentityData().DisplayName, s.Server().Name())
+						s.log.Infof("%s finished transferring to %s", s.Conn().IdentityData().DisplayName, s.Server().Name())
+						s.completeTransfer(nil)
+						continue
+					} else if s.postTransfer.CAS(true, false) {
 						continue
 					}
 				}

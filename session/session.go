@@ -53,7 +53,6 @@ type Session struct {
 
 	transferring atomic.Bool
 	postTransfer atomic.Bool
-	transferID   atomic.Uint64
 	dead         atomic.Bool
 	once         sync.Once
 }
@@ -212,7 +211,6 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		return errors.New("already being transferred")
 	}
 	s.postTransfer.Store(false)
-	transferID := s.transferID.Inc()
 
 	fromName := s.Server().Name()
 	s.log.Infof("%s is being transferred from %s to %s", s.conn.IdentityData().DisplayName, fromName, srv.Name())
@@ -307,8 +305,6 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		s.server = srv
 		s.server.IncrementPlayerCount()
 		s.serverMu.Unlock()
-
-		s.armTransferTimeout(transferID)
 	})
 
 	ctx.Stop(func() {
@@ -327,19 +323,6 @@ func (s *Session) completeTransfer(err error) {
 	if done != nil {
 		done(err)
 	}
-}
-
-func (s *Session) armTransferTimeout(transferID uint64) {
-	time.AfterFunc(15*time.Second, func() {
-		if s.transferID.Load() != transferID || !s.transferring.CAS(true, false) {
-			return
-		}
-		s.postTransfer.Store(false)
-		err := errors.New("client did not finish changing dimension")
-		s.log.Errorf("transfer failed for %s: %v", s.conn.IdentityData().DisplayName, err)
-		s.completeTransfer(err)
-		s.Disconnect("Server transfer timed out. Please reconnect.")
-	})
 }
 
 // Transferring returns if the session is currently transferring to a different server or not.
