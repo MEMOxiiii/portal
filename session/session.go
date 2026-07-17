@@ -37,9 +37,11 @@ type Session struct {
 
 	loginMu        sync.RWMutex
 	serverMu       sync.RWMutex
+	transferMu     sync.Mutex
 	server         *server.Server
 	serverConn     *minecraft.Conn
 	tempServerConn *minecraft.Conn
+	transferDone   func(error)
 
 	entities    *i64set.Set
 	playerList  *b16set.Set
@@ -51,6 +53,7 @@ type Session struct {
 
 	transferring atomic.Bool
 	postTransfer atomic.Bool
+	transferID   atomic.Uint64
 	dead         atomic.Bool
 	once         sync.Once
 }
@@ -208,6 +211,8 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 	if !s.transferring.CAS(false, true) {
 		return errors.New("already being transferred")
 	}
+	s.postTransfer.Store(false)
+	transferID := s.transferID.Inc()
 
 	fromName := s.Server().Name()
 	s.log.Infof("%s is being transferred from %s to %s", s.conn.IdentityData().DisplayName, fromName, srv.Name())
@@ -224,6 +229,9 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			})
 		}
 	}
+	s.transferMu.Lock()
+	s.transferDone = publishTransfer
+	s.transferMu.Unlock()
 
 	ctx := event.C()
 	s.handler().HandleTransfer(ctx, srv)
@@ -231,13 +239,12 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 	ctx.Continue(func() {
 		// If the player is dead, force-respawn them before transferring.
 		// Without this, the dimension trick fails and the player gets stuck.
-		if s.dead.Load() {
+		if s.dead.CAS(true, false) {
 			_ = s.conn.WritePacket(&packet.Respawn{
 				Position:        s.conn.GameData().PlayerPosition,
 				State:           packet.RespawnStateReadyToSpawn,
 				EntityRuntimeID: s.originalRuntimeID,
 			})
-			s.dead.Store(false)
 		}
 
 		// Notify the target server to disconnect any stale session for this player.
@@ -260,7 +267,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			if err != nil {
 				s.log.Errorf("transfer failed: could not dial %s: %v", srv.Name(), err)
 				s.setTransferring(false)
-				publishTransfer(err)
+				s.completeTransfer(err)
 				return
 			}
 		}
@@ -268,18 +275,9 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			_ = conn.Close()
 			s.log.Errorf("transfer failed: spawn timeout on %s: %v", srv.Name(), err)
 			s.setTransferring(false)
-			publishTransfer(err)
+			s.completeTransfer(err)
 			return
 		}
-
-		// Force-respawn on the new server in case the player was dead from a previous session.
-		// Without this, GeyserMC/Spigot may keep the player in a dead state, and the queued
-		// Respawn{SearchingForSpawn} packet will interfere with the dimension trick.
-		_ = conn.WritePacket(&packet.Respawn{
-			Position:        conn.GameData().PlayerPosition,
-			State:           packet.RespawnStateClientReadyToSpawn,
-			EntityRuntimeID: conn.GameData().EntityRuntimeID,
-		})
 
 		s.serverMu.Lock()
 		s.tempServerConn = conn
@@ -310,14 +308,38 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 		s.server.IncrementPlayerCount()
 		s.serverMu.Unlock()
 
-		publishTransfer(nil)
+		s.armTransferTimeout(transferID)
 	})
 
 	ctx.Stop(func() {
 		s.setTransferring(false)
+		s.completeTransfer(errors.New("transfer cancelled"))
 	})
 
 	return
+}
+
+func (s *Session) completeTransfer(err error) {
+	s.transferMu.Lock()
+	done := s.transferDone
+	s.transferDone = nil
+	s.transferMu.Unlock()
+	if done != nil {
+		done(err)
+	}
+}
+
+func (s *Session) armTransferTimeout(transferID uint64) {
+	time.AfterFunc(15*time.Second, func() {
+		if s.transferID.Load() != transferID || !s.transferring.CAS(true, false) {
+			return
+		}
+		s.postTransfer.Store(false)
+		err := errors.New("client did not finish changing dimension")
+		s.log.Errorf("transfer failed for %s: %v", s.conn.IdentityData().DisplayName, err)
+		s.completeTransfer(err)
+		s.Disconnect("Server transfer timed out. Please reconnect.")
+	})
 }
 
 // Transferring returns if the session is currently transferring to a different server or not.
@@ -340,6 +362,10 @@ func (s *Session) handler() Handler {
 // Close closes the session and any linked connections/counters.
 func (s *Session) Close() {
 	s.once.Do(func() {
+		if s.transferring.CAS(true, false) {
+			s.postTransfer.Store(false)
+			s.completeTransfer(errors.New("session closed during transfer"))
+		}
 		s.handler().HandleQuit()
 		s.Handle(NopHandler{})
 

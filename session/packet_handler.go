@@ -30,6 +30,12 @@ func handlePackets(s *Session) {
 			switch pk := pk.(type) {
 			case *packet.PlayerAction:
 				if pk.ActionType == protocol.PlayerActionDimensionChangeDone {
+					if s.postTransfer.CAS(true, false) {
+						s.transferring.Store(false)
+						s.log.Infof("%s finished transferring to %s", s.Conn().IdentityData().DisplayName, s.Server().Name())
+						s.completeTransfer(nil)
+						continue
+					}
 					if s.transferring.Load() {
 						s.serverMu.Lock()
 						gameData := s.tempServerConn.GameData()
@@ -73,16 +79,13 @@ func handlePackets(s *Session) {
 							Radius: uint32(gameData.ChunkRadius) << 4,
 						})
 
-						// Always clear the death screen after transfer, regardless of the proxy's
-						// tracked dead state. The new server may have queued Respawn{SearchingForSpawn}
-						// packets that haven't been read yet, so we preemptively tell the client
-						// they are alive to prevent the death screen from appearing.
-						s.dead.Store(false)
-						_ = s.conn.WritePacket(&packet.Respawn{
-							Position:        gameData.PlayerPosition,
-							State:           packet.RespawnStateReadyToSpawn,
-							EntityRuntimeID: s.originalRuntimeID,
-						})
+						if s.dead.CAS(true, false) {
+							_ = s.conn.WritePacket(&packet.Respawn{
+								Position:        gameData.PlayerPosition,
+								State:           packet.RespawnStateReadyToSpawn,
+								EntityRuntimeID: s.originalRuntimeID,
+							})
+						}
 
 						w.Wait()
 						_ = s.conn.Flush()
@@ -101,12 +104,9 @@ func handlePackets(s *Session) {
 
 						s.updateTranslatorData(gameData)
 
-						s.transferring.Store(false)
 						s.postTransfer.Store(true)
 
-						s.log.Infof("%s finished transferring to %s", s.Conn().IdentityData().DisplayName, s.Server().Name())
-						continue
-					} else if s.postTransfer.CAS(true, false) {
+						s.log.Debugf("%s connected to %s; waiting for client dimension confirmation", s.Conn().IdentityData().DisplayName, s.Server().Name())
 						continue
 					}
 				}
