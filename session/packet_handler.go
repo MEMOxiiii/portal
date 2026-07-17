@@ -25,10 +25,9 @@ func handlePackets(s *Session) {
 				return
 			}
 			s.translatePacket(pk)
+			clearLegacyIdentity(pk, s.Server().LegacyAuth())
 
 			switch pk := pk.(type) {
-			case *packet.BookEdit:
-				pk.XUID = ""
 			case *packet.PlayerAction:
 				if pk.ActionType == protocol.PlayerActionDimensionChangeDone {
 					if s.transferring.Load() {
@@ -111,8 +110,6 @@ func handlePackets(s *Session) {
 						continue
 					}
 				}
-			case *packet.Text:
-				pk.XUID = ""
 			}
 
 			if s.Transferring() {
@@ -220,4 +217,16 @@ func handlePackets(s *Session) {
 			})
 		}
 	}()
+}
+
+func clearLegacyIdentity(pk packet.Packet, legacyAuth bool) {
+	if !legacyAuth {
+		return
+	}
+	switch pk := pk.(type) {
+	case *packet.BookEdit:
+		pk.XUID = ""
+	case *packet.Text:
+		pk.XUID = ""
+	}
 }
