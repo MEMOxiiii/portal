@@ -49,6 +49,48 @@ go build -o portal ./examples/main.go
 
 On first run, Portal writes a `config.json` next to the binary. See the [Wiki](https://github.com/MEMOxiiii/portal/wiki/Configuration) for every setting.
 
+## Plugins
+
+Portal can be extended without forking it. A plugin is a Go package that registers itself with the [`plugin`](plugin/) package; importing that package from your `main` is all it takes to include it in the binary.
+
+```go
+package hello
+
+import "github.com/paroxity/portal/plugin"
+
+func init() { plugin.Register(&Hello{}) }
+
+type Hello struct{ plugin.Base }
+
+func (*Hello) Manifest() plugin.Manifest {
+	return plugin.Manifest{Name: "hello", Version: "1.0.0"}
+}
+
+func (h *Hello) Enable(ctx *plugin.Context) error {
+	ctx.Subscribe(event.TopicPlayerJoin, func(payload any) {
+		ctx.Log().Infof("%s joined", payload.(event.PlayerPayload).Name)
+	})
+	return nil
+}
+```
+
+Plugins get a `Context` with the running proxy, a name-prefixed logger, a `plugins/<name>/` data directory, and a `config.json` that is written from your defaults on first run. Load order follows `Depends`/`SoftDepends`; a plugin that panics or fails is skipped rather than taking the proxy down with it. See [`examples/plugins/greeter/`](examples/plugins/greeter/) for a worked example, and the `plugins` block in `config.json` to disable one without rebuilding.
+
+### What plugins can do today
+
+- Subscribe to proxy events — player join/quit, transfers, server register/unregister, health changes
+- Replace or wrap the load balancer, whitelist, and IP guard
+- Reach the session store, server registry, and any player's connection
+
+### Roadmap
+
+The plugin API is deliberately being grown in stages. Still to come:
+
+- [ ] **Packet interception.** `session.Handler` is currently a single slot, so only one consumer can intercept packets at a time. Needs a priority-ordered handler chain before it can be exposed to plugins.
+- [ ] **Command registry.** Replace the hardcoded `switch` in [admin.go](admin.go) with a registry plugins can add to, and route in-game `/` commands to the same place.
+- [ ] **Socket protocol extension.** Let plugins register their own socket packet types so they can talk to the backend server plugins (PortalPM / PortalDF / Portal-GeyserMC).
+- [ ] **External plugins.** A `plugin` role on the communication socket, so plugins can be written in any language rather than compiled in.
+
 ## Learn more
 
 Everything past this point — configuration reference, network architecture, the socket protocol for integrating your own backend, the Go API for embedding Portal as a library, the event bus, admin console, and clustering — lives in the **[Wiki](https://github.com/MEMOxiiii/portal/wiki)**.

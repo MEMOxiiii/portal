@@ -17,6 +17,7 @@ import (
 	"github.com/paroxity/portal/internal"
 	portallog "github.com/paroxity/portal/log"
 	"github.com/paroxity/portal/metrics"
+	"github.com/paroxity/portal/plugin"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
 	"github.com/paroxity/portal/socket"
@@ -85,6 +86,14 @@ func main() {
 	if conf.Routing.DefaultGroup != "" {
 		p.SetLoadBalancer(session.NewGroupedLoadBalancer(p.ServerRegistry(), conf.Routing.DefaultGroup, conf.Routing.FallbackGroups...))
 	}
+
+	// Plugins are loaded before the proxy starts listening so that any routing policy they install is in
+	// place by the time the first player connects.
+	pluginManager := plugin.NewManager(p, conf.Plugins.Directory, logger, conf.Plugins.Disabled)
+	if err := pluginManager.Load(); err != nil {
+		logger.Fatalf("failed to load plugins: %v", err)
+	}
+
 	if err := p.Listen(); err != nil {
 		logger.Fatalf("failed to listen on %s: %v", conf.Network.Address, err)
 	}
@@ -213,7 +222,11 @@ func main() {
 		}()
 	}
 
-	go waitForShutdown(p, socketServer, clusterBackend, clusterProxyID, logger)
+	// Every other subsystem is running at this point, so plugins can safely start background work and
+	// subscribe to events before the first player is accepted.
+	pluginManager.Enable()
+
+	go waitForShutdown(p, socketServer, pluginManager, clusterBackend, clusterProxyID, logger)
 	go p.ServeAdminConsole(os.Stdin, os.Stdout)
 
 	for {
@@ -232,12 +245,14 @@ func main() {
 // waitForShutdown blocks until an interrupt or termination signal is received, then gracefully disconnects
 // every connected session and closes the proxy's listeners before exiting the process. clusterBackend may
 // be nil if clustering is disabled.
-func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, clusterBackend cluster.Backend, clusterProxyID string, logger internal.Logger) {
+func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, pluginManager *plugin.Manager, clusterBackend cluster.Backend, clusterProxyID string, logger internal.Logger) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
 
 	logger.Infof("shutting down...")
+	// Plugins are disabled first, while the sessions they may want to act on are still connected.
+	pluginManager.Disable()
 	if err := p.Close(); err != nil {
 		logger.Errorf("failed to close proxy listener: %v", err)
 	}

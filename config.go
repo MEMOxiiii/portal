@@ -126,6 +126,17 @@ type Config struct {
 		// (non-draining) servers.
 		FallbackGroups []string `json:"fallback_groups"`
 	} `json:"routing"`
+	// Plugins holds settings related to the plugins compiled into the proxy binary. Plugins are Go
+	// packages that register themselves with the plugin package; see the plugin package documentation for
+	// how to write and include one.
+	Plugins struct {
+		// Directory is the directory plugins store their configuration and data in, each under a
+		// subdirectory named after the plugin.
+		Directory string `json:"directory"`
+		// Disabled is a list of plugin names that should not be loaded, even though they are compiled
+		// into the binary. Any plugin that depends on a disabled plugin is skipped as well.
+		Disabled []string `json:"disabled"`
+	} `json:"plugins"`
 	// Whitelist holds settings related to the proxy whitelist.
 	Whitelist struct {
 		// Enabled is if the whitelist is enabled.
@@ -175,6 +186,7 @@ func DefaultConfig() (c Config) {
 	c.HealthCheck.IntervalSeconds = 10
 	c.HealthCheck.TimeoutSeconds = 3
 	c.HealthCheck.FailureThreshold = 3
+	c.Plugins.Directory = "plugins"
 	c.ResourcePacks.Directory = "resource_packs"
 	c.ResourcePacks.HotReload.Interval = 30
 	c.MOTD = "Portal"

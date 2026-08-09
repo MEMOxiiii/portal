@@ -2,6 +2,8 @@ package portal
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
 	"github.com/paroxity/portal/server"
@@ -20,10 +22,15 @@ type Portal struct {
 
 	sessionStore   *session.Store
 	serverRegistry *server.Registry
-	loadBalancer   session.LoadBalancer
-	whitelist      session.Whitelist
-	ipGuard        session.IPGuard
 	events         *event.Bus
+
+	// routingMu guards the routing policies below. They may be replaced at any point during the proxy's
+	// lifetime, including by plugins reacting to a command or a configuration reload, while the accept
+	// loop is concurrently reading them.
+	routingMu    sync.RWMutex
+	loadBalancer session.LoadBalancer
+	whitelist    session.Whitelist
+	ipGuard      session.IPGuard
 }
 
 // New instantiates portal using the provided options and returns it. If some options are not set, default
@@ -80,12 +87,60 @@ func (p *Portal) ServerRegistry() *server.Registry {
 
 // LoadBalancer returns the load balancer that handles the server a player joins when they first connect to the proxy.
 func (p *Portal) LoadBalancer() session.LoadBalancer {
+	p.routingMu.RLock()
+	defer p.routingMu.RUnlock()
 	return p.loadBalancer
 }
 
 // SetLoadBalancer sets the load balancer that handles the server a player joins when they first connect to the proxy.
+// A nil load balancer is ignored, as the proxy would have no way to route new players without one.
 func (p *Portal) SetLoadBalancer(loadBalancer session.LoadBalancer) {
+	if loadBalancer == nil {
+		return
+	}
+	p.routingMu.Lock()
+	defer p.routingMu.Unlock()
 	p.loadBalancer = loadBalancer
+}
+
+// Whitelist returns the whitelist used to decide which players are allowed to join the proxy. Callers that
+// want to add a rule rather than replace the existing policy should wrap the value returned here and pass
+// the wrapper to SetWhitelist.
+func (p *Portal) Whitelist() session.Whitelist {
+	p.routingMu.RLock()
+	defer p.routingMu.RUnlock()
+	return p.whitelist
+}
+
+// SetWhitelist sets the whitelist used to decide which players are allowed to join the proxy. A nil
+// whitelist is ignored; use session.NewSimpleWhitelist(false, nil) to allow every player instead.
+func (p *Portal) SetWhitelist(whitelist session.Whitelist) {
+	if whitelist == nil {
+		return
+	}
+	p.routingMu.Lock()
+	defer p.routingMu.Unlock()
+	p.whitelist = whitelist
+}
+
+// IPGuard returns the IP guard used to reject connections before they reach the whitelist or game-layer
+// authentication. Callers that want to add a rule rather than replace the existing policy should wrap the
+// value returned here and pass the wrapper to SetIPGuard.
+func (p *Portal) IPGuard() session.IPGuard {
+	p.routingMu.RLock()
+	defer p.routingMu.RUnlock()
+	return p.ipGuard
+}
+
+// SetIPGuard sets the IP guard used to reject connections before they reach the whitelist or game-layer
+// authentication. A nil guard is ignored; use session.NopIPGuard{} to allow every connection instead.
+func (p *Portal) SetIPGuard(ipGuard session.IPGuard) {
+	if ipGuard == nil {
+		return
+	}
+	p.routingMu.Lock()
+	defer p.routingMu.Unlock()
+	p.ipGuard = ipGuard
 }
 
 // Listen starts to listen on the set address and allows connections from minecraft clients. An error is
@@ -113,15 +168,15 @@ func (p *Portal) Accept() (*session.Session, error) {
 		return nil, err
 	}
 	c := conn.(*minecraft.Conn)
-	if ok, m := p.ipGuard.Allow(c.RemoteAddr()); !ok {
+	if ok, m := p.IPGuard().Allow(c.RemoteAddr()); !ok {
 		_ = p.Disconnect(c, m)
 		return nil, fmt.Errorf("connection rejected by IP guard: %s", m)
 	}
-	if ok, m := p.whitelist.Authorize(c); !ok {
+	if ok, m := p.Whitelist().Authorize(c); !ok {
 		_ = p.Disconnect(c, m)
 		return nil, fmt.Errorf("player is not whitelisted: %s", m)
 	}
-	return session.New(c, p.sessionStore, p.loadBalancer, p.log, p.events)
+	return session.New(c, p.sessionStore, p.LoadBalancer(), p.log, p.events)
 }
 
 // Disconnect disconnects a Minecraft Conn passed by first sending a disconnect with the message passed, and
