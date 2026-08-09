@@ -126,16 +126,23 @@ type Config struct {
 		// (non-draining) servers.
 		FallbackGroups []string `json:"fallback_groups"`
 	} `json:"routing"`
-	// Plugins holds settings related to the plugins compiled into the proxy binary. Plugins are Go
-	// packages that register themselves with the plugin package; see the plugin package documentation for
-	// how to write and include one.
+	// Plugins holds settings related to plugins, both compiled into the proxy binary (see the plugin
+	// package) and external, standalone executables dropped into Directory (see the pluginsdk package).
 	Plugins struct {
-		// Directory is the directory plugins store their configuration and data in, each under a
-		// subdirectory named after the plugin.
+		// Directory is where plugins store their configuration and data, each under a subdirectory named
+		// after the plugin, and where external plugin executables are discovered.
 		Directory string `json:"directory"`
-		// Disabled is a list of plugin names that should not be loaded, even though they are compiled
-		// into the binary. Any plugin that depends on a disabled plugin is skipped as well.
+		// Disabled is a list of compiled-in plugin names that should not be loaded, even though they are
+		// present in the binary. Any plugin that depends on a disabled plugin is skipped as well.
 		Disabled []string `json:"disabled"`
+		// External holds settings related to external plugins.
+		External struct {
+			// Enabled determines whether Directory is scanned for external plugin executables at startup.
+			// It defaults to false because, unlike a compiled-in plugin, an external plugin is arbitrary
+			// code that runs automatically just by being placed in Directory, without appearing anywhere
+			// in the proxy's own source or build.
+			Enabled bool `json:"enabled"`
+		} `json:"external"`
 	} `json:"plugins"`
 	// Whitelist holds settings related to the proxy whitelist.
 	Whitelist struct {

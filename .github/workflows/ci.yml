@@ -1,0 +1,26 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+      - 'feat/**'
+      - 'feature/**'
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+      - name: Setup Golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+      - name: Build
+        run: go build -v ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test -race -v ./...

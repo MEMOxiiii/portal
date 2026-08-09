@@ -82,6 +82,27 @@ Plugins get a `Context` with the running proxy, a name-prefixed logger, a `plugi
 - Replace or wrap the load balancer, whitelist, and IP guard
 - Reach the session store, server registry, and any player's connection
 
+### External plugins — no proxy rebuild required
+
+For a plugin you want to drop in like a `.jar` or `.phar`, without ever rebuilding `portal` itself, write it against [`pluginsdk`](pluginsdk/) instead:
+
+```go
+package main
+
+import "github.com/paroxity/portal/pluginsdk"
+
+func main() {
+	pluginsdk.Serve(pluginsdk.Manifest{
+		Name:   "echo",
+		Events: []string{"player_join"},
+	}, func(e pluginsdk.Event) {
+		pluginsdk.Infof("event: %s", e.Topic)
+	})
+}
+```
+
+Build it on its own — `go build -o plugins/echo.portalplugin ./path/to/plugin` (`echo.portalplugin.exe` on Windows) — and drop the single resulting binary into the proxy's `plugins/` directory. It never touches the proxy's own source or build. The proxy (via the [`extplugin`](extplugin/) package) spawns it as a subprocess and talks to it over a small line-delimited JSON protocol on stdin/stdout: the plugin announces a manifest, the proxy forwards the events it asked for, and the plugin can log back through the proxy's own logger. This is off by default — set `plugins.external.enabled: true` in `config.json` to turn it on, since unlike a compiled-in plugin, anything matching `*.portalplugin` in that directory runs automatically. See [`examples/plugins/echo/`](examples/plugins/echo/) for the full worked example.
+
 ### Roadmap
 
 The plugin API is deliberately being grown in stages. Still to come:
@@ -89,7 +110,9 @@ The plugin API is deliberately being grown in stages. Still to come:
 - [ ] **Packet interception.** `session.Handler` is currently a single slot, so only one consumer can intercept packets at a time. Needs a priority-ordered handler chain before it can be exposed to plugins.
 - [ ] **Command registry.** Replace the hardcoded `switch` in [admin.go](admin.go) with a registry plugins can add to, and route in-game `/` commands to the same place.
 - [ ] **Socket protocol extension.** Let plugins register their own socket packet types so they can talk to the backend server plugins (PortalPM / PortalDF / Portal-GeyserMC).
-- [ ] **External plugins.** A `plugin` role on the communication socket, so plugins can be written in any language rather than compiled in.
+- [ ] **External plugins in other languages.** `pluginsdk` plugins are Go binaries; a `plugin` role on the communication socket would let the same drop-in model work for PHP/Python/JS plugins, matching the backend server integrations.
+- [ ] **External plugin data dir/config.json**, `DataDir()`/`Config()` equivalents to what compiled-in plugins get via `plugin.Context`.
+- [ ] **Hot reload.** External plugins are currently only discovered at proxy startup; adding/removing one still needs a restart.
 
 ## Learn more
 

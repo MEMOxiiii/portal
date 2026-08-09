@@ -14,6 +14,7 @@ import (
 	"github.com/paroxity/portal"
 	"github.com/paroxity/portal/cluster"
 	"github.com/paroxity/portal/event"
+	"github.com/paroxity/portal/extplugin"
 	"github.com/paroxity/portal/internal"
 	portallog "github.com/paroxity/portal/log"
 	"github.com/paroxity/portal/metrics"
@@ -48,6 +49,10 @@ func main() {
 		level = logrus.InfoLevel
 	}
 	logger.SetLevel(level)
+
+	if err := os.MkdirAll(conf.Plugins.Directory, 0o755); err != nil {
+		logger.Fatalf("unable to create plugins directory: %v", err)
+	}
 
 	resourcePackManager, err := portal.NewResourcePackManager(conf.ResourcePacks.Directory, conf.ResourcePacks.EncryptionKeys)
 	if err != nil {
@@ -92,6 +97,14 @@ func main() {
 	pluginManager := plugin.NewManager(p, conf.Plugins.Directory, logger, conf.Plugins.Disabled)
 	if err := pluginManager.Load(); err != nil {
 		logger.Fatalf("failed to load plugins: %v", err)
+	}
+
+	var extPluginManager *extplugin.Manager
+	if conf.Plugins.External.Enabled {
+		extPluginManager = extplugin.NewManager(p, conf.Plugins.Directory, logger)
+		if err := extPluginManager.Start(); err != nil {
+			logger.Errorf("failed to start external plugins: %v", err)
+		}
 	}
 
 	if err := p.Listen(); err != nil {
@@ -226,7 +239,7 @@ func main() {
 	// subscribe to events before the first player is accepted.
 	pluginManager.Enable()
 
-	go waitForShutdown(p, socketServer, pluginManager, clusterBackend, clusterProxyID, logger)
+	go waitForShutdown(p, socketServer, pluginManager, extPluginManager, clusterBackend, clusterProxyID, logger)
 	go p.ServeAdminConsole(os.Stdin, os.Stdout)
 
 	for {
@@ -243,9 +256,9 @@ func main() {
 }
 
 // waitForShutdown blocks until an interrupt or termination signal is received, then gracefully disconnects
-// every connected session and closes the proxy's listeners before exiting the process. clusterBackend may
-// be nil if clustering is disabled.
-func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, pluginManager *plugin.Manager, clusterBackend cluster.Backend, clusterProxyID string, logger internal.Logger) {
+// every connected session and closes the proxy's listeners before exiting the process. clusterBackend and
+// extPluginManager may be nil if clustering, respectively external plugins, are disabled.
+func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, pluginManager *plugin.Manager, extPluginManager *extplugin.Manager, clusterBackend cluster.Backend, clusterProxyID string, logger internal.Logger) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
@@ -253,6 +266,9 @@ func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, plugi
 	logger.Infof("shutting down...")
 	// Plugins are disabled first, while the sessions they may want to act on are still connected.
 	pluginManager.Disable()
+	if extPluginManager != nil {
+		extPluginManager.Stop()
+	}
 	if err := p.Close(); err != nil {
 		logger.Errorf("failed to close proxy listener: %v", err)
 	}
