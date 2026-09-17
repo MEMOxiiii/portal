@@ -8,6 +8,7 @@ jobs:
     name: Build ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         os: [ "linux", "darwin", "windows" ]
         arch: [ "amd64", "arm64" ]
