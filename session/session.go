@@ -95,25 +95,34 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 
 	s.loginMu.Lock()
 	go func() {
-		defer s.loginMu.Unlock()
+		// Unlocked before Close()/Publish/handlePackets below, on every path: Close() publishes
+		// TopicPlayerQuit and runs the session's Handler, and a subscriber or handler calling back into
+		// s.Server()/s.Conn()/s.ServerConn() from this same goroutine would otherwise deadlock on loginMu.
+		unlock := sync.OnceFunc(s.loginMu.Unlock)
+		defer unlock()
+
 		srvConn, err := s.dial(srv)
 		if err != nil {
 			log.Errorf("failed to dial server %s: %v (unwrapped: %+v)", srv.Address(), err, errors.Unwrap(err))
+			unlock()
+			s.Close()
 			return
 		}
 
 		s.serverConn = srvConn
-		if err = s.login(); err != nil {
-			_ = srvConn.Close()
+		if err := s.login(); err != nil {
 			log.Errorf("failed to login to server %s: %v", srv.Address(), err)
+			unlock()
+			s.Close()
 			return
 		}
+		s.translator = newTranslator(srvConn.GameData())
+		unlock()
+
 		log.Infof("%s has been connected to server %s", conn.IdentityData().DisplayName, srv.Name())
 		if s.bus != nil {
 			s.bus.Publish(event.TopicPlayerJoin, event.PlayerPayload{UUID: s.uuid, Name: conn.IdentityData().DisplayName})
 		}
-
-		s.translator = newTranslator(srvConn.GameData())
 		handlePackets(s)
 	}()
 	return s, nil
@@ -162,19 +171,20 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 }
 
 // login performs the initial login sequence for the session.
-func (s *Session) login() (err error) {
+func (s *Session) login() error {
 	var g sync.WaitGroup
 	g.Add(2)
+	var clientErr, serverErr error
 	go func() {
-		err = s.conn.StartGameTimeout(s.serverConn.GameData(), time.Minute)
-		g.Done()
+		defer g.Done()
+		clientErr = s.conn.StartGameTimeout(s.serverConn.GameData(), time.Minute)
 	}()
 	go func() {
-		err = s.serverConn.DoSpawnTimeout(time.Minute)
-		g.Done()
+		defer g.Done()
+		serverErr = s.serverConn.DoSpawnTimeout(time.Minute)
 	}()
 	g.Wait()
-	return
+	return errors.Join(clientErr, serverErr)
 }
 
 // waitForLogin uses the login mutex to wait for the login to complete. If the player is still logging in, loginMu will
@@ -193,14 +203,25 @@ func (s *Session) Conn() *minecraft.Conn {
 // Server returns the server the session is currently connected to.
 func (s *Session) Server() *server.Server {
 	s.waitForLogin()
-	s.serverMu.RLock()
-	defer s.serverMu.RUnlock()
-	return s.server
+	return s.currentServer()
 }
 
 // ServerConn returns the connection for the session's current server.
 func (s *Session) ServerConn() *minecraft.Conn {
 	s.waitForLogin()
+	return s.currentServerConn()
+}
+
+// currentServer and currentServerConn read s.server/s.serverConn under serverMu without waiting for the
+// initial login, unlike Server()/ServerConn(). Only safe once login is known to have completed already,
+// e.g. from the packet-handling goroutines started by handlePackets.
+func (s *Session) currentServer() *server.Server {
+	s.serverMu.RLock()
+	defer s.serverMu.RUnlock()
+	return s.server
+}
+
+func (s *Session) currentServerConn() *minecraft.Conn {
 	s.serverMu.RLock()
 	defer s.serverMu.RUnlock()
 	return s.serverConn
