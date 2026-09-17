@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/df-mc/go-nethernet/endpoint"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/google/uuid"
 	"github.com/paroxity/portal/event"
@@ -148,16 +149,11 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 
 	switch srv.Transport() {
 	case server.TransportNetherNet:
-		// See newNetherNetDialSignaling's doc comment for why this isn't just endpoint.NewClient().
-		signaling, err := newNetherNetDialSignaling(srv.Address())
-		if err != nil {
-			return nil, fmt.Errorf("dial server %q: %w", srv.Name(), err)
-		}
 		// DialContextNetwork doesn't apply dialer.Dial's own 30s bound; without this, a hung backend
 		// blocks forever and holds the caller's loginMu locked.
 		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		defer cancel()
-		return dialer.DialContextNetwork(ctx, minecraft.NetherNet{Signaling: signaling}, signaling.dirty)
+		return dialer.DialContextNetwork(ctx, minecraft.NetherNet{Signaling: endpoint.NewClient()}, srv.Address())
 	case server.TransportRakNet, "":
 		return dialer.Dial("raknet", srv.Address())
 	default:
