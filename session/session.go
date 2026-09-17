@@ -38,13 +38,14 @@ type Session struct {
 	// h holds the current handler of the session.
 	h Handler
 
-	loginMu        sync.RWMutex
-	serverMu       sync.RWMutex
-	transferMu     sync.Mutex
-	server         *server.Server
-	serverConn     *minecraft.Conn
-	tempServerConn *minecraft.Conn
-	transferDone   func(error)
+	loginMu              sync.RWMutex
+	serverMu             sync.RWMutex
+	transferMu           sync.Mutex
+	server               *server.Server
+	serverConn           *minecraft.Conn
+	tempServerConn       *minecraft.Conn
+	transferConfirmTimer *time.Timer
+	transferDone         func(error)
 
 	entities    *i64set.Set
 	playerList  *b16set.Set
@@ -131,6 +132,13 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 // dialTimeout matches the 30s timeout minecraft.Dialer.Dial applies internally for RakNet, which
 // DialContextNetwork (used for NetherNet) doesn't apply on its own.
 const dialTimeout = 30 * time.Second
+
+// transferConfirmTimeout bounds how long a transfer waits for the client to send back
+// PlayerAction{DimensionChangeDone} once dial/login to the target server has succeeded. Without it, a
+// client that never confirms (a lost packet, a stuck/malicious client) would leave the session soft-locked
+// forever: every client-bound packet is dropped while transferring, and tempServerConn's connection to the
+// target server would sit open until the player eventually disconnects entirely.
+const transferConfirmTimeout = 30 * time.Second
 
 // dial dials a new connection to the provided server. It then returns the connection between the proxy and
 // that server, along with any error that may have occurred.
@@ -323,6 +331,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 
 		s.serverMu.Lock()
 		s.tempServerConn = conn
+		s.transferConfirmTimer = time.AfterFunc(transferConfirmTimeout, func() { s.abortStuckTransfer(srv) })
 		s.serverMu.Unlock()
 
 		proxyDimension := selectProxyDimension(s.serverConn.GameData().Dimension, conn.GameData().Dimension)
@@ -368,6 +377,108 @@ func (s *Session) completeTransfer(err error) {
 	if done != nil {
 		done(err)
 	}
+}
+
+// finishTransferDimensionChange switches the session over to tempServerConn once the client confirms it
+// has finished the dimension-change trick used to mask a transfer, and returns the target server's game
+// data. It returns ok=false without doing anything if tempServerConn isn't set yet, which can happen since
+// Transfer marks the session as transferring well before the dial/login to the target server completes;
+// in that case the DimensionChangeDone that triggered this call is a stray one from the client, not the
+// one the real transfer is waiting for.
+func (s *Session) finishTransferDimensionChange() (gameData minecraft.GameData, ok bool) {
+	s.serverMu.Lock()
+	defer s.serverMu.Unlock()
+
+	if s.tempServerConn == nil {
+		return minecraft.GameData{}, false
+	}
+	if s.transferConfirmTimer != nil {
+		s.transferConfirmTimer.Stop()
+		s.transferConfirmTimer = nil
+	}
+
+	gameData = s.tempServerConn.GameData()
+	s.changeDimension(gameData.Dimension, gameData.PlayerPosition)
+
+	var w sync.WaitGroup
+	w.Add(2)
+	go func() {
+		s.clearEntities()
+		s.clearEffects()
+		w.Done()
+	}()
+	go func() {
+		s.clearPlayerList()
+		s.clearBossBars()
+		s.clearScoreboard()
+		w.Done()
+	}()
+
+	_ = s.conn.WritePacket(&packet.MovePlayer{
+		EntityRuntimeID: s.originalRuntimeID,
+		Position:        gameData.PlayerPosition,
+		Pitch:           gameData.Pitch,
+		Yaw:             gameData.Yaw,
+		Mode:            packet.MoveModeReset,
+	})
+
+	_ = s.conn.WritePacket(&packet.LevelEvent{EventType: packet.LevelEventStopRaining, EventData: 10000})
+	_ = s.conn.WritePacket(&packet.LevelEvent{EventType: packet.LevelEventStopThunderstorm})
+	_ = s.conn.WritePacket(&packet.SetDifficulty{Difficulty: uint32(gameData.Difficulty)})
+	_ = s.conn.WritePacket(&packet.GameRulesChanged{GameRules: gameData.GameRules})
+	_ = s.conn.WritePacket(&packet.SetPlayerGameType{GameType: gameData.PlayerGameMode})
+
+	// Tell the client to request chunks around the new position immediately.
+	_ = s.conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
+		Position: protocol.BlockPos{
+			int32(gameData.PlayerPosition.X()),
+			int32(gameData.PlayerPosition.Y()),
+			int32(gameData.PlayerPosition.Z()),
+		},
+		Radius: uint32(gameData.ChunkRadius) << 4,
+	})
+
+	if s.dead.CAS(true, false) {
+		_ = s.conn.WritePacket(&packet.Respawn{
+			Position:        gameData.PlayerPosition,
+			State:           packet.RespawnStateReadyToSpawn,
+			EntityRuntimeID: s.originalRuntimeID,
+		})
+	}
+
+	w.Wait()
+	_ = s.conn.Flush()
+
+	// Send a Disconnect packet before closing so the downstream server (e.g. GeyserMC → Spigot)
+	// immediately cleans up the player session instead of waiting for a Raknet timeout.
+	_ = s.serverConn.WritePacket(&packet.Disconnect{Message: "Server transfer"})
+	_ = s.serverConn.Close()
+
+	s.serverConn = s.tempServerConn
+	s.tempServerConn = nil
+
+	return gameData, true
+}
+
+// abortStuckTransfer fires transferConfirmTimeout after a transfer's dial/login to srv succeeds, if the
+// client still hasn't confirmed it by then. It's a no-op if the transfer already completed (or was already
+// aborted) by the time it fires.
+func (s *Session) abortStuckTransfer(srv *server.Server) {
+	s.serverMu.Lock()
+	conn := s.tempServerConn
+	s.tempServerConn = nil
+	s.transferConfirmTimer = nil
+	s.serverMu.Unlock()
+
+	if conn == nil {
+		return
+	}
+
+	_ = conn.Close()
+	s.setTransferring(false)
+	err := fmt.Errorf("transfer to %s timed out waiting for client confirmation", srv.Name())
+	s.log.Errorf("%s", err)
+	s.completeTransfer(err)
 }
 
 // Transferring returns if the session is currently transferring to a different server or not.
