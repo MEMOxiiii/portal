@@ -21,6 +21,7 @@ const (
 type authThrottle struct {
 	mu    sync.Mutex
 	state map[string]*ipAuthState
+	stop  chan struct{}
 }
 
 type ipAuthState struct {
@@ -30,7 +31,40 @@ type ipAuthState struct {
 }
 
 func newAuthThrottle() *authThrottle {
-	return &authThrottle{state: make(map[string]*ipAuthState)}
+	t := &authThrottle{state: make(map[string]*ipAuthState), stop: make(chan struct{})}
+	go t.cleanupLoop()
+	return t
+}
+
+// cleanupLoop periodically evicts entries for IPs that are no longer blocked and haven't failed recently,
+// so state doesn't grow without bound over the life of a long-running proxy.
+func (t *authThrottle) cleanupLoop() {
+	ticker := time.NewTicker(authFailureWindow)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			t.cleanup()
+		case <-t.stop:
+			return
+		}
+	}
+}
+
+func (t *authThrottle) cleanup() {
+	now := time.Now()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for host, s := range t.state {
+		if now.After(s.blockedUntil) && now.Sub(s.windowStart) > authFailureWindow {
+			delete(t.state, host)
+		}
+	}
+}
+
+// Close stops the throttle's background cleanup goroutine.
+func (t *authThrottle) Close() {
+	close(t.stop)
 }
 
 // Blocked returns whether the IP of the provided address is currently blocked from authenticating.

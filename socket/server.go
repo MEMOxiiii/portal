@@ -280,6 +280,7 @@ func (s *DefaultServer) SetCluster(c cluster.Backend) {
 
 // Close ...
 func (s *DefaultServer) Close() error {
+	s.authThrottle.Close()
 	if s.listener == nil {
 		return nil
 	}
