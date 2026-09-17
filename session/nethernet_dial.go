@@ -9,20 +9,10 @@ import (
 	"github.com/paroxity/portal/server"
 )
 
-// netherNetDialAddress derives the address gophertunnel's login validation requires in
-// login.ClientData.ServerAddress for a NetherNet connection, from signalingURL, the clean
-// "scheme://host:port" URL of a backend server's signaling endpoint. signalingURL is validated with
-// server.ParseNetherNetAddress -- the same function RegisterServer registration uses -- so a server that
-// passed registration can never fail here with a different opinion of what's a valid address.
-//
-// gophertunnel's ClientData validation (minecraft/protocol/login/data.go) expects a NetherNet
-// ServerAddress in the literal form "scheme://host:port:port" -- the port repeated a second time after
-// the URL -- and rejects a plain URL as invalid. Since gophertunnel's Dialer always sets ServerAddress to
-// the exact address string used to dial (see minecraft.Dialer.DialContextNetwork), that string can't
-// simultaneously be a plain URL (which is what the NetherNet transport itself needs to actually connect)
-// and this doubled-port form. netherNetDialSignaling resolves the conflict: the doubled-port address is
-// what gets passed to Dial, and netherNetDialSignaling translates it back to the clean URL before it
-// reaches the network.
+// netherNetDialAddress derives the doubled-port form ("scheme://host:port:port") gophertunnel's login
+// validation requires in ClientData.ServerAddress for a NetherNet connection. gophertunnel sets
+// ServerAddress to the exact string used to dial, so it can't simultaneously be that form and the clean
+// URL the transport itself needs -- netherNetDialSignaling reconciles the two.
 func netherNetDialAddress(signalingURL string) (string, error) {
 	u, err := server.ParseNetherNetAddress(signalingURL)
 	if err != nil {
@@ -31,28 +21,16 @@ func netherNetDialAddress(signalingURL string) (string, error) {
 	return signalingURL + ":" + u.Port(), nil
 }
 
-// netherNetDialSignaling adapts an *endpoint.Client so a dial can use netherNetDialAddress's doubled-port
-// form as its nethernet.Dialer networkID -- to satisfy gophertunnel's ClientData.ServerAddress validation
-// -- while still reaching the backend at its real, clean signaling URL.
-//
-// nethernet.Dialer correlates every signal it sends and receives by comparing NetworkID strings against
-// the networkID it was given, so simply handing endpoint.Client the doubled-port string as its own target
-// URL isn't an option either: it would try to dial that malformed address directly. Instead,
-// netherNetDialSignaling sits between the two, rewriting NetworkID from the doubled-port form to the clean
-// URL on outgoing signals (so endpoint.Client's HTTP requests reach the real server) and back again on
-// incoming ones (so nethernet.Dialer's own correlation, which still expects the doubled-port form, keeps
-// matching).
+// netherNetDialSignaling wraps an *endpoint.Client so a dial can use the doubled-port address as its
+// nethernet.Dialer networkID (satisfying ClientData.ServerAddress validation) while still reaching the
+// backend at its real, clean signaling URL: it rewrites NetworkID from dirty to clean on outgoing signals,
+// and back again on incoming ones, since the dialer correlates signals by exact NetworkID match.
 type netherNetDialSignaling struct {
 	*endpoint.Client
-	// dirty is the doubled-port address passed to nethernet.Dialer.DialContext as its networkID.
-	dirty string
-	// clean is the signaling endpoint's real URL, used for the underlying HTTP requests.
-	clean string
+	dirty string // doubled-port address, used as the nethernet.Dialer networkID
+	clean string // the signaling endpoint's real URL
 }
 
-// newNetherNetDialSignaling builds the Signaling used to dial a NetherNet backend at the clean signaling
-// URL clean, deriving the doubled-port form internally so callers never handle dirty/clean as two loose
-// strings that could be transposed by mistake.
 func newNetherNetDialSignaling(clean string) (*netherNetDialSignaling, error) {
 	dirty, err := netherNetDialAddress(clean)
 	if err != nil {
@@ -61,17 +39,12 @@ func newNetherNetDialSignaling(clean string) (*netherNetDialSignaling, error) {
 	return &netherNetDialSignaling{Client: endpoint.NewClient(), dirty: dirty, clean: clean}, nil
 }
 
-// Signal rewrites signal.NetworkID from dirty to clean before delegating to the underlying endpoint.Client,
-// so the HTTP request it builds targets the server's real signaling URL rather than the doubled-port form.
 func (s *netherNetDialSignaling) Signal(ctx context.Context, signal *nethernet.Signal) error {
 	rewritten := *signal
 	rewritten.NetworkID = s.clean
 	return s.Client.Signal(ctx, &rewritten)
 }
 
-// Notify rewrites the NetworkID of every signal from clean back to dirty before forwarding it to n, so
-// nethernet.Dialer's own correlation of incoming signals -- which expects dirty, the value it was given as
-// networkID -- keeps matching.
 func (s *netherNetDialSignaling) Notify(n nethernet.Notifier) (stop func()) {
 	return s.Client.Notify(netherNetNotifierFunc(func(signal *nethernet.Signal) bool {
 		return n.NotifySignal(rewriteNetherNetSignal(signal, s.clean, s.dirty))

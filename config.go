@@ -17,34 +17,23 @@ type Config struct {
 		// Address is the address on which the proxy should listen. Players may connect to this address in
 		// order to join. It should be in the format of "ip:port".
 		Address string `json:"address"`
-		// Transport selects the network transport used for the player-facing listener. Valid values are
-		// "nethernet" (the default, official Bedrock WebRTC transport also used by Bedrock Dedicated
-		// Server when 'transport=nethernet' is set) and "raknet" (the legacy UDP transport). Players on a
-		// client version that doesn't support NetherNet cannot join while this is set to "nethernet".
+		// Transport selects the player-facing listener's transport: "nethernet" (default) or "raknet".
 		Transport string `json:"transport"`
-		// NetherNet holds settings specific to the NetherNet transport. It is only used when Transport is
-		// "nethernet".
+		// NetherNet holds settings used only when Transport is "nethernet".
 		NetherNet struct {
-			// TLS holds an optional certificate used to serve the NetherNet signaling endpoint over
-			// HTTPS. Bedrock clients try HTTPS before HTTP when locating a NetherNet server, so
-			// configuring this is recommended for proxies reachable over the internet. If either file is
-			// empty, the endpoint is served over plain HTTP instead.
+			// TLS optionally serves the signaling endpoint over HTTPS instead of plain HTTP.
 			TLS struct {
 				CertFile string `json:"cert_file"`
 				KeyFile  string `json:"key_file"`
 			} `json:"tls"`
-			// ICEServers lists the STUN/TURN servers offered to clients for WebRTC NAT traversal. Leaving
-			// this empty may prevent players behind restrictive NATs from establishing a connection.
+			// ICEServers lists the STUN/TURN servers offered for WebRTC NAT traversal.
 			ICEServers []struct {
 				URLs     []string `json:"urls"`
 				Username string   `json:"username"`
 				Password string   `json:"password"`
 			} `json:"ice_servers"`
-			// UDPPorts is the UDP port, or "min-max" range, used for the actual WebRTC game connection
-			// once signaling completes. It must be reachable from outside (forwarded through any
-			// firewall/NAT) and must not overlap a RakNet listener's port. If left empty, the operating
-			// system assigns a random ephemeral port per connection, which most firewalls block by
-			// default and will silently prevent players from finishing the connection.
+			// UDPPorts is the UDP port, or "min-max" range, for the WebRTC game connection. Must be
+			// reachable through any firewall/NAT and not overlap a RakNet listener's port.
 			UDPPorts string `json:"udp_ports"`
 		} `json:"nethernet"`
 		// FlushRateMS is the maximum time client-bound packets wait before Portal sends them. Lower values

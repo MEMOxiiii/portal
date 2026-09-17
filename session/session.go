@@ -118,9 +118,8 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 	return s, nil
 }
 
-// dialTimeout bounds how long dialing a backend server may take, matching the 30s timeout
-// minecraft.Dialer.Dial applies internally for RakNet, which DialContextNetwork (used for the NetherNet
-// path) does not apply on its own.
+// dialTimeout matches the 30s timeout minecraft.Dialer.Dial applies internally for RakNet, which
+// DialContextNetwork (used for NetherNet) doesn't apply on its own.
 const dialTimeout = 30 * time.Second
 
 // dial dials a new connection to the provided server. It then returns the connection between the proxy and
@@ -149,22 +148,13 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 
 	switch srv.Transport() {
 	case server.TransportNetherNet:
-		// Identity is forwarded the same self-signed way as for RakNet (see minecraft.Dialer's offline
-		// login path); only the underlying transport used to reach the server differs. The server's
-		// Address is the URL of its NetherNet signaling endpoint, not a "host:port" pair.
-		//
-		// gophertunnel's Dialer sets ClientData.ServerAddress to the exact address string used to dial,
-		// but its own login validation additionally requires that address to have its port doubled (see
-		// netherNetDialAddress) for a NetherNet connection -- a form the signaling endpoint itself can't
-		// be dialed with directly. netherNetDialSignaling reconciles the two: see its doc comment.
+		// See newNetherNetDialSignaling's doc comment for why this isn't just endpoint.NewClient().
 		signaling, err := newNetherNetDialSignaling(srv.Address())
 		if err != nil {
 			return nil, fmt.Errorf("dial server %q: %w", srv.Name(), err)
 		}
-		// dialer.Dial's raknet path bounds itself to 30s internally (see gophertunnel's Dialer.Dial); do
-		// the same here explicitly, since DialContextNetwork uses whatever context it's given verbatim and
-		// would otherwise block forever -- holding the caller's loginMu locked -- against a backend whose
-		// signaling endpoint or WebRTC negotiation hangs.
+		// DialContextNetwork doesn't apply dialer.Dial's own 30s bound; without this, a hung backend
+		// blocks forever and holds the caller's loginMu locked.
 		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		defer cancel()
 		return dialer.DialContextNetwork(ctx, minecraft.NetherNet{Signaling: signaling}, signaling.dirty)

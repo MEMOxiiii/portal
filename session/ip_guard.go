@@ -101,10 +101,8 @@ func (g *SimpleIPGuard) Allow(addr net.Addr) (bool, string) {
 	return true, ""
 }
 
-// ipHostOf returns the host portion of a net.Addr, falling back to its full string form if it cannot be
-// split into a host and port. NetherNet connections are addressed by a *nethernet.Addr, whose String form
-// is a composite of network/connection IDs and ICE candidates rather than a plain "host:port" pair, so its
-// underlying candidate address is extracted instead.
+// ipHostOf returns the host portion of a net.Addr. A *nethernet.Addr's String form isn't a plain
+// "host:port" pair, so its underlying candidate address is extracted instead.
 func ipHostOf(addr net.Addr) string {
 	if a, ok := addr.(*nethernet.Addr); ok {
 		return netherNetHostOf(a)
@@ -116,9 +114,8 @@ func ipHostOf(addr net.Addr) string {
 	return host
 }
 
-// netherNetHostOf returns the IP address of the ICE candidate selected for a NetherNet connection, falling
-// back to the first signaled candidate if the connection hasn't selected one yet, and to the Addr's string
-// form as a last resort.
+// netherNetHostOf returns the selected ICE candidate's address, falling back to the first signaled
+// candidate, then to the Addr's string form.
 func netherNetHostOf(addr *nethernet.Addr) string {
 	if addr.SelectedCandidate != nil {
 		return addr.SelectedCandidate.Address

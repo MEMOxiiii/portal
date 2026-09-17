@@ -18,11 +18,8 @@ type Server struct {
 	playerCount atomic.Int64
 }
 
-// New creates a new Server with the provided name, address, transport, group, weight and legacy auth
-// setting. Group may be empty if the server does not belong to a named group. Weight controls how large a
-// share of new players the server should receive relative to others in the same group when load balancing;
-// a weight of 0 is treated as 1 (the default), so omitting it keeps the previous even-split behaviour. The
-// server starts out marked healthy; a HealthChecker may mark it unhealthy if it stops responding.
+// New creates a new Server. Weight of 0 is treated as 1. transport of "" is treated as TransportRakNet.
+// The server starts out marked healthy.
 func New(name, address string, transport Transport, group string, weight uint32, legacyAuth bool) *Server {
 	if weight == 0 {
 		weight = 1
@@ -48,9 +45,8 @@ func (s *Server) Name() string {
 	return s.name
 }
 
-// Address returns the address the server was registered with. For TransportRakNet this is a "host:port"
-// pair, e.g. "127.0.0.1:19132". For TransportNetherNet this is the URL of the server's HTTP(S) signaling
-// endpoint, e.g. "http://127.0.0.1:19132".
+// Address returns the address the server was registered with: a "host:port" pair for TransportRakNet, or
+// the server's signaling endpoint URL for TransportNetherNet.
 func (s *Server) Address() string {
 	return s.address
 }

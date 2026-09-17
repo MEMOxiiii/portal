@@ -19,14 +19,8 @@ const (
 )
 
 // ParseNetherNetAddress validates and parses address as the signaling endpoint URL required for
-// TransportNetherNet, returning the parsed URL on success. It is the single source of truth for what a
-// usable NetherNet address looks like, shared by every caller that needs to either validate one (e.g. at
-// RegisterServer time) or extract its port (e.g. to dial it) -- so the two can never silently disagree
-// about what's acceptable.
-//
-// A valid address is an absolute "http://" or "https://" URL with an explicit port and no path: something
-// that can be dialed directly and unambiguously reports its own port, which callers that need to embed
-// that port elsewhere (see minecraft.Dialer's ClientData.ServerAddress requirements) depend on.
+// TransportNetherNet: an absolute "http://" or "https://" URL with an explicit port and no path. Shared by
+// every caller that validates or dials a NetherNet address, so they can't disagree about what's valid.
 func ParseNetherNetAddress(address string) (*url.URL, error) {
 	u, err := url.Parse(address)
 	if err != nil || u.Scheme == "" || u.Host == "" {

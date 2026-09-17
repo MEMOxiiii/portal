@@ -30,8 +30,7 @@ func (*RegisterServerHandler) Handle(p packet.Packet, srv Server, c *Client) err
 	return nil
 }
 
-// parseTransport validates the Transport field of a RegisterServer packet, defaulting an empty value to
-// server.TransportRakNet for backwards compatibility with clients that predate the field.
+// parseTransport validates Transport, defaulting "" to server.TransportRakNet for older clients.
 func parseTransport(s string) (server.Transport, error) {
 	switch server.Transport(s) {
 	case "":
@@ -43,10 +42,8 @@ func parseTransport(s string) (server.Transport, error) {
 	}
 }
 
-// validateAddress checks that address is well-formed for transport, catching the most common
-// misconfiguration up front (a "host:port" pair left over from raknet after switching a server to
-// TransportNetherNet, or a NetherNet address missing its port) with a clear error instead of a confusing
-// failure later, deep inside a health check or a player transfer.
+// validateAddress checks address is well-formed for transport, rejecting a bad NetherNet address at
+// registration instead of failing later inside a health check or transfer.
 func validateAddress(transport server.Transport, address string) error {
 	if address == "" {
 		return fmt.Errorf("address must not be empty")

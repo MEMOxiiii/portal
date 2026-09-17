@@ -13,14 +13,10 @@ import (
 	"github.com/sandertv/go-raknet"
 )
 
-// HealthChecker periodically checks every server in a Registry to verify it is actually reachable and
-// responding, rather than just registered over the socket protocol. A TransportRakNet server is checked
-// with a RakNet unconnected ping; a TransportNetherNet server, which has no equivalent unconnected ping, is
-// checked with a plain HTTP GET of its signaling endpoint. A server that fails consecutive checks past
-// failureThreshold is marked unhealthy so load balancers skip it; it is marked healthy again automatically
-// as soon as a check succeeds. This protects against a server that is still socket-connected but hung,
-// crashed, or otherwise not actually serving the game, regardless of whether the proxy is fronting a single
-// small server or a large fleet.
+// HealthChecker periodically pings every server in a Registry (a RakNet unconnected ping, or an HTTP GET
+// of its signaling endpoint for NetherNet) to catch one that's still socket-connected but hung or crashed.
+// A server failing failureThreshold consecutive checks is marked unhealthy so load balancers skip it, and
+// healthy again as soon as a check succeeds.
 type HealthChecker struct {
 	registry         *Registry
 	interval         time.Duration
@@ -110,9 +106,8 @@ func (h *HealthChecker) ping(srv *Server) error {
 	return err
 }
 
-// pingNetherNet checks reachability of a NetherNet server's signaling endpoint with a plain HTTP GET of
-// its "/v1/join" ping route, the same route a Bedrock client uses to discover the endpoint. NetherNet has
-// no unconnected-ping equivalent of RakNet's, since signaling requires a full HTTP round trip.
+// pingNetherNet GETs a NetherNet server's "/v1/join" route, the same one a Bedrock client probes to
+// discover it -- NetherNet has no unconnected-ping equivalent of RakNet's.
 func pingNetherNet(address string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
