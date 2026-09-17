@@ -148,7 +148,21 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 		// Identity is forwarded the same self-signed way as for RakNet (see minecraft.Dialer's offline
 		// login path); only the underlying transport used to reach the server differs. The server's
 		// Address is the URL of its NetherNet signaling endpoint, not a "host:port" pair.
-		return dialer.DialContextNetwork(context.Background(), minecraft.NetherNet{Signaling: endpoint.NewClient()}, srv.Address())
+		//
+		// gophertunnel's Dialer sets ClientData.ServerAddress to the exact address string used to dial,
+		// but its own login validation additionally requires that address to have its port doubled (see
+		// netherNetDialAddress) for a NetherNet connection -- a form the signaling endpoint itself can't
+		// be dialed with directly. netherNetDialSignaling reconciles the two: see its doc comment.
+		dirty, err := netherNetDialAddress(srv.Address())
+		if err != nil {
+			return nil, fmt.Errorf("dial server %q: %w", srv.Name(), err)
+		}
+		signaling := &netherNetDialSignaling{
+			Client: endpoint.NewClient(),
+			dirty:  dirty,
+			clean:  srv.Address(),
+		}
+		return dialer.DialContextNetwork(context.Background(), minecraft.NetherNet{Signaling: signaling}, dirty)
 	case server.TransportRakNet, "":
 		return dialer.Dial("raknet", srv.Address())
 	default:
