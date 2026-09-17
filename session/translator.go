@@ -76,7 +76,6 @@ func (t *translator) translatePacket(pk packet.Packet) {
 		}
 	case *packet.BossEvent:
 		pk.BossEntityUniqueID = t.translateUniqueID(pk.BossEntityUniqueID)
-		pk.PlayerUniqueID = t.translateUniqueID(pk.PlayerUniqueID)
 	case *packet.Camera:
 		pk.CameraEntityUniqueID = t.translateUniqueID(pk.CameraEntityUniqueID)
 		pk.TargetPlayerUniqueID = t.translateUniqueID(pk.TargetPlayerUniqueID)

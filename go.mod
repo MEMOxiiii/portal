@@ -11,7 +11,7 @@ require (
 	github.com/pion/webrtc/v4 v4.2.16-0.20260627075746-7a223a6f4d4f
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/sandertv/go-raknet v1.15.2-0.20260705184311-0d1fd09e2cf6
-	github.com/sandertv/gophertunnel v1.61.0
+	github.com/sandertv/gophertunnel v1.62.0
 	github.com/scylladb/go-set v1.0.3-0.20200225121959-cc7b2070d91e
 	github.com/sirupsen/logrus v1.9.3
 	go.uber.org/atomic v1.11.0
