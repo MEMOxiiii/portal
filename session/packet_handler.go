@@ -3,7 +3,6 @@ package session
 import (
 	"errors"
 	"net"
-	"sync"
 
 	"github.com/paroxity/portal/event"
 	"github.com/sandertv/gophertunnel/minecraft"
@@ -32,79 +31,20 @@ func handlePackets(s *Session) {
 			case *packet.PlayerAction:
 				if pk.ActionType == protocol.PlayerActionDimensionChangeDone {
 					if s.transferring.Load() {
-						s.serverMu.Lock()
-						gameData := s.tempServerConn.GameData()
-						s.changeDimension(gameData.Dimension, gameData.PlayerPosition)
+						gameData, ok := s.finishTransferDimensionChange()
+						if ok {
+							s.updateTranslatorData(gameData)
 
-						var w sync.WaitGroup
-						w.Add(2)
-						go func() {
-							s.clearEntities()
-							s.clearEffects()
-							w.Done()
-						}()
-						go func() {
-							s.clearPlayerList()
-							s.clearBossBars()
-							s.clearScoreboard()
-							w.Done()
-						}()
+							s.transferring.Store(false)
+							s.postTransfer.Store(true)
 
-						_ = s.conn.WritePacket(&packet.MovePlayer{
-							EntityRuntimeID: s.originalRuntimeID,
-							Position:        gameData.PlayerPosition,
-							Pitch:           gameData.Pitch,
-							Yaw:             gameData.Yaw,
-							Mode:            packet.MoveModeReset,
-						})
-
-						_ = s.conn.WritePacket(&packet.LevelEvent{EventType: packet.LevelEventStopRaining, EventData: 10000})
-						_ = s.conn.WritePacket(&packet.LevelEvent{EventType: packet.LevelEventStopThunderstorm})
-						_ = s.conn.WritePacket(&packet.SetDifficulty{Difficulty: uint32(gameData.Difficulty)})
-						_ = s.conn.WritePacket(&packet.GameRulesChanged{GameRules: gameData.GameRules})
-						_ = s.conn.WritePacket(&packet.SetPlayerGameType{GameType: gameData.PlayerGameMode})
-
-						// Tell the client to request chunks around the new position immediately.
-						_ = s.conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
-							Position: protocol.BlockPos{
-								int32(gameData.PlayerPosition.X()),
-								int32(gameData.PlayerPosition.Y()),
-								int32(gameData.PlayerPosition.Z()),
-							},
-							Radius: uint32(gameData.ChunkRadius) << 4,
-						})
-
-						if s.dead.CAS(true, false) {
-							_ = s.conn.WritePacket(&packet.Respawn{
-								Position:        gameData.PlayerPosition,
-								State:           packet.RespawnStateReadyToSpawn,
-								EntityRuntimeID: s.originalRuntimeID,
-							})
+							s.log.Infof("%s finished transferring to %s", s.conn.IdentityData().DisplayName, s.currentServer().Name())
+							s.completeTransfer(nil)
+							continue
 						}
-
-						w.Wait()
-						_ = s.conn.Flush()
-
-						// Send a Disconnect packet before closing so the downstream server
-						// (e.g. GeyserMC → Spigot) immediately cleans up the player session
-						// instead of waiting for a Raknet timeout.
-						_ = s.serverConn.WritePacket(&packet.Disconnect{
-							Message: "Server transfer",
-						})
-						_ = s.serverConn.Close()
-
-						s.serverConn = s.tempServerConn
-						s.tempServerConn = nil
-						s.serverMu.Unlock()
-
-						s.updateTranslatorData(gameData)
-
-						s.transferring.Store(false)
-						s.postTransfer.Store(true)
-
-						s.log.Infof("%s finished transferring to %s", s.conn.IdentityData().DisplayName, s.currentServer().Name())
-						s.completeTransfer(nil)
-						continue
+						// tempServerConn wasn't set yet: the client sent DimensionChangeDone before the
+						// transfer's dial/login to the target server finished (transferring is set well
+						// before tempServerConn is). Fall through and forward it like any other packet.
 					} else if s.postTransfer.CAS(true, false) {
 						continue
 					}
