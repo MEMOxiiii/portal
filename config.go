@@ -17,6 +17,30 @@ type Config struct {
 		// Address is the address on which the proxy should listen. Players may connect to this address in
 		// order to join. It should be in the format of "ip:port".
 		Address string `json:"address"`
+		// Transport selects the network transport used for the player-facing listener. Valid values are
+		// "nethernet" (the default, official Bedrock WebRTC transport also used by Bedrock Dedicated
+		// Server when 'transport=nethernet' is set) and "raknet" (the legacy UDP transport). Players on a
+		// client version that doesn't support NetherNet cannot join while this is set to "nethernet".
+		Transport string `json:"transport"`
+		// NetherNet holds settings specific to the NetherNet transport. It is only used when Transport is
+		// "nethernet".
+		NetherNet struct {
+			// TLS holds an optional certificate used to serve the NetherNet signaling endpoint over
+			// HTTPS. Bedrock clients try HTTPS before HTTP when locating a NetherNet server, so
+			// configuring this is recommended for proxies reachable over the internet. If either file is
+			// empty, the endpoint is served over plain HTTP instead.
+			TLS struct {
+				CertFile string `json:"cert_file"`
+				KeyFile  string `json:"key_file"`
+			} `json:"tls"`
+			// ICEServers lists the STUN/TURN servers offered to clients for WebRTC NAT traversal. Leaving
+			// this empty may prevent players behind restrictive NATs from establishing a connection.
+			ICEServers []struct {
+				URLs     []string `json:"urls"`
+				Username string   `json:"username"`
+				Password string   `json:"password"`
+			} `json:"ice_servers"`
+		} `json:"nethernet"`
 		// FlushRateMS is the maximum time client-bound packets wait before Portal sends them. Lower values
 		// reduce relay latency at the cost of more frequent compression and network writes.
 		FlushRateMS int `json:"flush_rate_ms"`
@@ -158,6 +182,7 @@ type Config struct {
 // DefaultConfig returns a configuration with the default values filled out.
 func DefaultConfig() (c Config) {
 	c.Network.Address = ":19132"
+	c.Network.Transport = "nethernet"
 	c.Network.FlushRateMS = 20
 	c.Network.Communication.Address = ":19131"
 	c.Network.ReaderLimits = true
