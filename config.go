@@ -40,6 +40,12 @@ type Config struct {
 				Username string   `json:"username"`
 				Password string   `json:"password"`
 			} `json:"ice_servers"`
+			// UDPPorts is the UDP port, or "min-max" range, used for the actual WebRTC game connection
+			// once signaling completes. It must be reachable from outside (forwarded through any
+			// firewall/NAT) and must not overlap a RakNet listener's port. If left empty, the operating
+			// system assigns a random ephemeral port per connection, which most firewalls block by
+			// default and will silently prevent players from finishing the connection.
+			UDPPorts string `json:"udp_ports"`
 		} `json:"nethernet"`
 		// FlushRateMS is the maximum time client-bound packets wait before Portal sends them. Lower values
 		// reduce relay latency at the cost of more frequent compression and network writes.
@@ -183,6 +189,7 @@ type Config struct {
 func DefaultConfig() (c Config) {
 	c.Network.Address = ":19132"
 	c.Network.Transport = "nethernet"
+	c.Network.NetherNet.UDPPorts = "19133"
 	c.Network.FlushRateMS = 20
 	c.Network.Communication.Address = ":19131"
 	c.Network.ReaderLimits = true

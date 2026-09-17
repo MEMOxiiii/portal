@@ -80,6 +80,7 @@ func main() {
 			TLSCertFile: conf.Network.NetherNet.TLS.CertFile,
 			TLSKeyFile:  conf.Network.NetherNet.TLS.KeyFile,
 			ICEServers:  iceServers,
+			UDPPorts:    conf.Network.NetherNet.UDPPorts,
 		},
 		ListenConfig: minecraft.ListenConfig{
 			StatusProvider: portal.NewMOTDStatusProvider(conf.MOTD).SubMOTD(conf.SubMOTD),

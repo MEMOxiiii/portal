@@ -7,6 +7,7 @@ require (
 	github.com/go-gl/mathgl v1.1.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-colorable v0.1.11
+	github.com/pion/ice/v4 v4.2.7
 	github.com/pion/webrtc/v4 v4.2.16-0.20260627075746-7a223a6f4d4f
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/sandertv/go-raknet v1.15.2-0.20260705184311-0d1fd09e2cf6
@@ -28,7 +29,6 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/pion/datachannel v1.6.2 // indirect
 	github.com/pion/dtls/v3 v3.1.4 // indirect
-	github.com/pion/ice/v4 v4.2.7 // indirect
 	github.com/pion/interceptor v0.1.45 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.1.0 // indirect

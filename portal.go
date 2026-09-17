@@ -108,7 +108,7 @@ func (p *Portal) Listen() error {
 		}
 		p.listener = l
 	case TransportNetherNet:
-		network, nn, err := newNetherNetNetwork(p.address, p.netherNetOpts)
+		network, nn, err := newNetherNetNetwork(p.address, p.netherNetOpts, p.log)
 		if err != nil {
 			return err
 		}
