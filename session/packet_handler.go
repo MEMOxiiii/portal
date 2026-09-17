@@ -16,8 +16,9 @@ import (
 func handlePackets(s *Session) {
 	go func() {
 		defer s.Close()
+		defer recoverPacketLoop(s, "client->server")
 		for {
-			pk, err := s.Conn().ReadPacket()
+			pk, err := s.conn.ReadPacket()
 			if err != nil {
 				if !errors.Is(err, net.ErrClosed) {
 					s.log.Errorf("failed to read packet from connection: %v", err)
@@ -25,7 +26,7 @@ func handlePackets(s *Session) {
 				return
 			}
 			s.translatePacket(pk)
-			clearLegacyIdentity(pk, s.Server().LegacyAuth())
+			clearLegacyIdentity(pk, s.currentServer().LegacyAuth())
 
 			switch pk := pk.(type) {
 			case *packet.PlayerAction:
@@ -101,7 +102,7 @@ func handlePackets(s *Session) {
 						s.transferring.Store(false)
 						s.postTransfer.Store(true)
 
-						s.log.Infof("%s finished transferring to %s", s.Conn().IdentityData().DisplayName, s.Server().Name())
+						s.log.Infof("%s finished transferring to %s", s.conn.IdentityData().DisplayName, s.currentServer().Name())
 						s.completeTransfer(nil)
 						continue
 					} else if s.postTransfer.CAS(true, false) {
@@ -118,17 +119,19 @@ func handlePackets(s *Session) {
 			s.handler().HandleServerBoundPacket(ctx, pk)
 
 			ctx.Continue(func() {
-				_ = s.ServerConn().WritePacket(pk)
+				_ = s.currentServerConn().WritePacket(pk)
 			})
 		}
 	}()
 
 	go func() {
+		defer s.Close()
+		defer recoverPacketLoop(s, "server->client")
 		for {
-			conn := s.ServerConn()
+			conn := s.currentServerConn()
 			pk, err := conn.ReadPacket()
 			if err != nil {
-				if conn != s.ServerConn() {
+				if conn != s.currentServerConn() {
 					continue
 				}
 				ctx := event.C()
@@ -209,10 +212,19 @@ func handlePackets(s *Session) {
 			s.handler().HandleClientBoundPacket(ctx, pk)
 
 			ctx.Continue(func() {
-				_ = s.Conn().WritePacket(pk)
+				_ = s.conn.WritePacket(pk)
 			})
 		}
 	}()
+}
+
+// recoverPacketLoop stops a panic while marshaling/unmarshaling one packet from crashing the whole proxy
+// process, closing only the affected session instead: gophertunnel's minecraft.Conn.WritePacket doesn't
+// recover its own panics.
+func recoverPacketLoop(s *Session, direction string) {
+	if r := recover(); r != nil {
+		s.log.Errorf("session %s: recovered from panic in %s packet loop: %v", s.uuid, direction, r)
+	}
 }
 
 func clearLegacyIdentity(pk packet.Packet, legacyAuth bool) {

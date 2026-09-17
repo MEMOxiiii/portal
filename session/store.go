@@ -60,7 +60,9 @@ func (s *Store) Store(x *Session) {
 	defer s.mu.Unlock()
 
 	s.sessions[x.UUID()] = x
-	s.sessionNames[x.Conn().IdentityData().DisplayName] = x
+	// x.conn (not the exported Conn()) since Store/Delete can run while the session's own loginMu is still
+	// held by New()'s own goroutine on a dial/login failure; conn itself never changes after construction.
+	s.sessionNames[x.conn.IdentityData().DisplayName] = x
 }
 
 // Delete deletes a session from the store.
@@ -71,6 +73,6 @@ func (s *Store) Delete(x uuid.UUID) {
 	v, ok := s.sessions[x]
 	if ok {
 		delete(s.sessions, x)
-		delete(s.sessionNames, v.Conn().IdentityData().DisplayName)
+		delete(s.sessionNames, v.conn.IdentityData().DisplayName)
 	}
 }
