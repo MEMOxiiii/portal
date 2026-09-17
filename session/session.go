@@ -275,6 +275,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 	ctx := event.C()
 	s.handler().HandleTransfer(ctx, srv)
 
+	var conn *minecraft.Conn
 	ctx.Continue(func() {
 		// If the player is dead, force-respawn them before transferring.
 		// Without this, the dimension trick fails and the player gets stuck.
@@ -294,7 +295,9 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			time.Sleep(1 * time.Second)
 		}
 
-		conn, err := s.dial(srv)
+		// conn/err are the outer named values, not shadowed here: HandleTransfer's caller (the
+		// TransferRequest handler) reports success/failure straight from Transfer()'s return value.
+		conn, err = s.dial(srv)
 		if err != nil {
 			// If the server still thinks the player is logged in, retry once after a longer delay
 			// to allow the Spigot server to fully clean up the kicked session.
@@ -350,7 +353,8 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 
 	ctx.Stop(func() {
 		s.setTransferring(false)
-		s.completeTransfer(errors.New("transfer cancelled"))
+		err = errors.New("transfer cancelled")
+		s.completeTransfer(err)
 	})
 
 	return
