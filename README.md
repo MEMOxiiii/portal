@@ -19,7 +19,7 @@
 
 ---
 
-**Portal** lets Bedrock players connect once and move between multiple backend servers — no matter what software each one runs — with instant, zero-downtime transfers.
+**Portal** lets Bedrock players connect once and move between multiple backend servers — no matter what software each one runs — with instant, zero-downtime transfers. Players connect over **NetherNet** (Bedrock's official WebRTC transport) by default — see the [Wiki](https://github.com/MEMOxiiii/portal/wiki/NetherNet-Transport) for setup details, or switch to RakNet with one config line.
 
 ## Supported backends
 
