@@ -1,11 +1,14 @@
 package session
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/df-mc/go-nethernet/endpoint"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/google/uuid"
 	"github.com/paroxity/portal/event"
@@ -133,12 +136,24 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 	if srv.LegacyAuth() {
 		i.XUID = ""
 	}
-	return minecraft.Dialer{
+	dialer := minecraft.Dialer{
 		ClientData:          c,
 		IdentityData:        i,
 		EnableLegacyAuth:    srv.LegacyAuth(),
 		KeepXBLIdentityData: !srv.LegacyAuth(),
-	}.Dial("raknet", srv.Address())
+	}
+
+	switch srv.Transport() {
+	case server.TransportNetherNet:
+		// Identity is forwarded the same self-signed way as for RakNet (see minecraft.Dialer's offline
+		// login path); only the underlying transport used to reach the server differs. The server's
+		// Address is the URL of its NetherNet signaling endpoint, not a "host:port" pair.
+		return dialer.DialContextNetwork(context.Background(), minecraft.NetherNet{Signaling: endpoint.NewClient()}, srv.Address())
+	case server.TransportRakNet, "":
+		return dialer.Dial("raknet", srv.Address())
+	default:
+		return nil, fmt.Errorf("dial server %q: unknown transport %q", srv.Name(), srv.Transport())
+	}
 }
 
 // login performs the initial login sequence for the session.
@@ -394,7 +409,7 @@ func (s *Session) clearEntities() {
 
 // clearPlayerList flushes the playerList map and removes all the entries for the client.
 func (s *Session) clearPlayerList() {
-	var entries = make([]protocol.PlayerListEntry, s.playerList.Size())
+	var entries = make([]protocol.PlayerListEntry, 0, s.playerList.Size())
 	s.playerList.Each(func(uid [16]byte) bool {
 		entries = append(entries, protocol.PlayerListEntry{ActionType: protocol.PlayerListActionRemove, UUID: uid})
 		return true

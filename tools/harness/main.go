@@ -485,7 +485,7 @@ func testHealthCheck() {
 	}()
 
 	reg := server.NewDefaultRegistry()
-	reg.AddServer(server.New("backend", addr, "", 1, false))
+	reg.AddServer(server.New("backend", addr, server.TransportRakNet, "", 1, false))
 	hcLog := &capLogger{}
 	// interval 200ms, timeout 400ms, threshold 3 -> ~3 failed pings (each up to 400ms) to flip unhealthy.
 	checker := server.NewHealthChecker(reg, 200*time.Millisecond, 400*time.Millisecond, 3, hcLog, nil)
@@ -538,8 +538,6 @@ func testHealthCheck() {
 
 func testWeightedLoadBalancing() {
 	reg := server.NewDefaultRegistry()
-	reg.AddServer(server.New("w1", "127.0.0.1:1", "lobby", 1, false))
-	reg.AddServer(server.New("w3", "127.0.0.1:2", "lobby", 3, false))
 	lb := session.NewGroupedLoadBalancer(reg, "lobby")
 
 	const total = 1000

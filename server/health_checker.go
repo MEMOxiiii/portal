@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,12 +13,14 @@ import (
 	"github.com/sandertv/go-raknet"
 )
 
-// HealthChecker periodically sends a RakNet unconnected ping to every server in a Registry to verify it is
-// actually reachable and responding, rather than just registered over the socket protocol. A server that
-// fails consecutive checks past failureThreshold is marked unhealthy so load balancers skip it; it is
-// marked healthy again automatically as soon as a ping succeeds. This protects against a server that is
-// still socket-connected but hung, crashed, or otherwise not actually serving the game, regardless of
-// whether the proxy is fronting a single small server or a large fleet.
+// HealthChecker periodically checks every server in a Registry to verify it is actually reachable and
+// responding, rather than just registered over the socket protocol. A TransportRakNet server is checked
+// with a RakNet unconnected ping; a TransportNetherNet server, which has no equivalent unconnected ping, is
+// checked with a plain HTTP GET of its signaling endpoint. A server that fails consecutive checks past
+// failureThreshold is marked unhealthy so load balancers skip it; it is marked healthy again automatically
+// as soon as a check succeeds. This protects against a server that is still socket-connected but hung,
+// crashed, or otherwise not actually serving the game, regardless of whether the proxy is fronting a single
+// small server or a large fleet.
 type HealthChecker struct {
 	registry         *Registry
 	interval         time.Duration
@@ -73,7 +78,7 @@ func (h *HealthChecker) checkAll() {
 
 // check pings a single server and updates its healthy state based on the result.
 func (h *HealthChecker) check(srv *Server) {
-	_, err := raknet.PingTimeout(srv.Address(), h.timeout)
+	err := h.ping(srv)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -94,6 +99,37 @@ func (h *HealthChecker) check(srv *Server) {
 		h.logf("server %q is responding again, marking healthy", srv.Name())
 		h.publish(srv, true)
 	}
+}
+
+// ping checks reachability of srv using the strategy appropriate for its transport.
+func (h *HealthChecker) ping(srv *Server) error {
+	if srv.Transport() == TransportNetherNet {
+		return pingNetherNet(srv.Address(), h.timeout)
+	}
+	_, err := raknet.PingTimeout(srv.Address(), h.timeout)
+	return err
+}
+
+// pingNetherNet checks reachability of a NetherNet server's signaling endpoint with a plain HTTP GET of
+// its "/v1/join" ping route, the same route a Bedrock client uses to discover the endpoint. NetherNet has
+// no unconnected-ping equivalent of RakNet's, since signaling requires a full HTTP round trip.
+func pingNetherNet(address string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(address, "/")+"/v1/join", nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (h *HealthChecker) logf(format string, v ...interface{}) {

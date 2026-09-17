@@ -13,22 +13,27 @@ import (
 	"github.com/df-mc/go-nethernet"
 	"github.com/df-mc/go-nethernet/endpoint"
 	"github.com/paroxity/portal/internal"
+	"github.com/paroxity/portal/server"
 	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
 	"github.com/sandertv/gophertunnel/minecraft"
 )
 
-// Transport identifies the network transport used for the proxy's player-facing listener.
-type Transport string
+// Transport identifies a network transport used to reach a Bedrock server, whether that is the proxy's
+// own player-facing listener (Options.Transport) or a registered backend server. It is an alias of
+// server.Transport, the same type a Server reports from its Transport method, since the player-facing
+// listener and a backend server are addressed by the same two transports.
+type Transport = server.Transport
 
 const (
-	// TransportNetherNet is the official and default transport. It serves Minecraft's WebRTC-based
-	// signaling endpoint over HTTP(S) on Options.Address, the same mechanism Bedrock Dedicated Server
-	// exposes when 'transport=nethernet' is set. Clients that support NetherNet try this endpoint before
-	// falling back to RakNet, so it should be preferred unless a specific reason requires RakNet.
-	TransportNetherNet Transport = "nethernet"
+	// TransportNetherNet is the official and default player-facing transport. It serves Minecraft's
+	// WebRTC-based signaling endpoint over HTTP(S) on Options.Address, the same mechanism Bedrock
+	// Dedicated Server exposes when 'transport=nethernet' is set. Clients that support NetherNet try this
+	// endpoint before falling back to RakNet, so it should be preferred unless a specific reason requires
+	// RakNet.
+	TransportNetherNet = server.TransportNetherNet
 	// TransportRakNet is the legacy UDP transport used by Bedrock before NetherNet support was introduced.
-	TransportRakNet Transport = "raknet"
+	TransportRakNet = server.TransportRakNet
 )
 
 // NetherNetOptions holds settings specific to the NetherNet transport. It is only used when

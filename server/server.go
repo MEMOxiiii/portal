@@ -8,6 +8,7 @@ import (
 type Server struct {
 	name       string
 	address    string
+	transport  Transport
 	group      string
 	weight     uint32
 	legacyAuth bool
@@ -17,18 +18,22 @@ type Server struct {
 	playerCount atomic.Int64
 }
 
-// New creates a new Server with the provided name, address, group, weight and legacy auth setting. Group
-// may be empty if the server does not belong to a named group. Weight controls how large a share of new
-// players the server should receive relative to others in the same group when load balancing; a weight of
-// 0 is treated as 1 (the default), so omitting it keeps the previous even-split behaviour. The server
-// starts out marked healthy; a HealthChecker may mark it unhealthy if it stops responding.
-func New(name, address, group string, weight uint32, legacyAuth bool) *Server {
+// New creates a new Server with the provided name, address, transport, group, weight and legacy auth
+// setting. Group may be empty if the server does not belong to a named group. Weight controls how large a
+// share of new players the server should receive relative to others in the same group when load balancing;
+// a weight of 0 is treated as 1 (the default), so omitting it keeps the previous even-split behaviour. The
+// server starts out marked healthy; a HealthChecker may mark it unhealthy if it stops responding.
+func New(name, address string, transport Transport, group string, weight uint32, legacyAuth bool) *Server {
 	if weight == 0 {
 		weight = 1
+	}
+	if transport == "" {
+		transport = TransportRakNet
 	}
 	s := &Server{
 		name:       name,
 		address:    address,
+		transport:  transport,
 		group:      group,
 		weight:     weight,
 		legacyAuth: legacyAuth,
@@ -43,10 +48,16 @@ func (s *Server) Name() string {
 	return s.name
 }
 
-// Address returns the IP address the server was registered with. This should also contain the port separated
-// by a colon. E.g. "127.0.0.1:19132".
+// Address returns the address the server was registered with. For TransportRakNet this is a "host:port"
+// pair, e.g. "127.0.0.1:19132". For TransportNetherNet this is the URL of the server's HTTP(S) signaling
+// endpoint, e.g. "http://127.0.0.1:19132".
 func (s *Server) Address() string {
 	return s.address
+}
+
+// Transport returns the network transport used to dial this server.
+func (s *Server) Transport() Transport {
+	return s.transport
 }
 
 // LegacyAuth returns whether the proxy should use legacy authentication when dialing this server.
