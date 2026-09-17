@@ -7,7 +7,7 @@ import (
 
 // Registry represents a registry which stores the severs registered on the proxy.
 type Registry struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	servers map[string]*Server
 }
 
@@ -18,8 +18,8 @@ func NewDefaultRegistry() *Registry {
 
 // Server attempts to find a server from its name, and returns the server and if it was found or not.
 func (r *Registry) Server(name string) (*Server, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	srv, ok := r.servers[strings.ToLower(name)]
 	return srv, ok
@@ -27,8 +27,8 @@ func (r *Registry) Server(name string) (*Server, bool) {
 
 // Servers returns a slice of all the available servers on the proxy.
 func (r *Registry) Servers() (all []*Server) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	for _, srv := range r.servers {
 		all = append(all, srv)
@@ -39,8 +39,8 @@ func (r *Registry) Servers() (all []*Server) {
 // ServersInGroup returns a slice of all the available servers on the proxy that were registered with the
 // provided group.
 func (r *Registry) ServersInGroup(group string) (servers []*Server) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	for _, srv := range r.servers {
 		if srv.Group() == group {

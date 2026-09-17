@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/MEMOxiiii/portal/releases"><img src="https://img.shields.io/github/v/release/MEMOxiiii/portal?style=flat-square&color=%2300b894" alt="Release"></a>
   <a href="https://github.com/MEMOxiiii/portal/blob/master/LICENCE"><img src="https://img.shields.io/badge/License-Apache%202.0-0984e3?style=flat-square" alt="License"></a>
-  <img src="https://img.shields.io/badge/Go-1.24+-00cec9?style=flat-square&logo=go&logoColor=white" alt="Go 1.24+">
+  <img src="https://img.shields.io/badge/Go-1.25+-00cec9?style=flat-square&logo=go&logoColor=white" alt="Go 1.25+">
   <img src="https://img.shields.io/badge/Bedrock-v2193%20%7C%201.26.50-6c5ce7?style=flat-square" alt="Bedrock Protocol">
 </p>
 
@@ -39,7 +39,7 @@ chmod +x portal   # Linux/macOS only
 ./portal
 ```
 
-Or build from source (requires Go 1.24+):
+Or build from source (requires Go 1.25+):
 
 ```bash
 git clone https://github.com/MEMOxiiii/portal.git
