@@ -142,7 +142,7 @@ func logNetherNetRequests(log internal.Logger, next http.Handler) http.Handler {
 // that uses it. The endpoint does not start serving requests until the returned netherNetListener's serve
 // method is called; callers must do so only after registering the network with a minecraft.Listener, since
 // the signaling handler rejects offers until a listener is registered to receive them.
-func newNetherNetNetwork(address string, opts NetherNetOptions, log internal.Logger) (minecraft.Network, *netherNetListener, error) {
+func newNetherNetNetwork(address string, opts NetherNetOptions, log internal.Logger) (network minecraft.Network, nn *netherNetListener, err error) {
 	credentials := &nethernet.Credentials{ICEServers: opts.ICEServers}
 
 	ports, err := parseNetherNetPortRange(opts.UDPPorts)
@@ -163,6 +163,13 @@ func newNetherNetNetwork(address string, opts NetherNetOptions, log internal.Log
 			return nil, nil, fmt.Errorf("configure nethernet ephemeral udp port range: %w", err)
 		}
 	}
+	// From here on, any early return must close udpMux (if allocated) so a later failure doesn't leak the
+	// UDP socket it holds.
+	defer func() {
+		if err != nil && udpMux != nil {
+			_ = udpMux.Close()
+		}
+	}()
 
 	handler := endpoint.HandlerConfig{
 		Credentials: func(context.Context) (*nethernet.Credentials, error) { return credentials, nil },
@@ -170,24 +177,22 @@ func newNetherNetNetwork(address string, opts NetherNetOptions, log internal.Log
 
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		if udpMux != nil {
-			_ = udpMux.Close()
-		}
 		return nil, nil, fmt.Errorf("listen nethernet endpoint: %w", err)
 	}
-	if opts.TLSCertFile != "" || opts.TLSKeyFile != "" {
-		cert, err := tls.LoadX509KeyPair(opts.TLSCertFile, opts.TLSKeyFile)
+	defer func() {
 		if err != nil {
 			_ = l.Close()
-			if udpMux != nil {
-				_ = udpMux.Close()
-			}
-			return nil, nil, fmt.Errorf("load nethernet tls certificate: %w", err)
+		}
+	}()
+	if opts.TLSCertFile != "" || opts.TLSKeyFile != "" {
+		cert, certErr := tls.LoadX509KeyPair(opts.TLSCertFile, opts.TLSKeyFile)
+		if certErr != nil {
+			return nil, nil, fmt.Errorf("load nethernet tls certificate: %w", certErr)
 		}
 		l = tls.NewListener(l, &tls.Config{Certificates: []tls.Certificate{cert}})
 	}
 
-	network := minecraft.NetherNet{
+	network = minecraft.NetherNet{
 		Signaling: handler,
 		ListenConfig: nethernet.ListenConfig{
 			API: webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine)),

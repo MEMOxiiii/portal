@@ -2,7 +2,6 @@ package socket
 
 import (
 	"fmt"
-	"net/url"
 
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/server"
@@ -16,11 +15,10 @@ type RegisterServerHandler struct{ requireAuth }
 func (*RegisterServerHandler) Handle(p packet.Packet, srv Server, c *Client) error {
 	pk := p.(*packet.RegisterServer)
 	transport, err := parseTransport(pk.Transport)
-	if err != nil {
-		srv.Logger().Errorf("socket connection \"%s\" sent an invalid RegisterServer packet: %v", c.Name(), err)
-		return err
+	if err == nil {
+		err = validateAddress(transport, pk.Address)
 	}
-	if err := validateAddress(transport, pk.Address); err != nil {
+	if err != nil {
 		srv.Logger().Errorf("socket connection \"%s\" sent an invalid RegisterServer packet: %v", c.Name(), err)
 		return err
 	}
@@ -47,8 +45,8 @@ func parseTransport(s string) (server.Transport, error) {
 
 // validateAddress checks that address is well-formed for transport, catching the most common
 // misconfiguration up front (a "host:port" pair left over from raknet after switching a server to
-// TransportNetherNet) with a clear error instead of a confusing URL-parse failure later, deep inside a
-// health check or a player transfer.
+// TransportNetherNet, or a NetherNet address missing its port) with a clear error instead of a confusing
+// failure later, deep inside a health check or a player transfer.
 func validateAddress(transport server.Transport, address string) error {
 	if address == "" {
 		return fmt.Errorf("address must not be empty")
@@ -56,12 +54,8 @@ func validateAddress(transport server.Transport, address string) error {
 	if transport != server.TransportNetherNet {
 		return nil
 	}
-	u, err := url.Parse(address)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("nethernet address must be the full URL of the server's signaling endpoint (e.g. \"http://host:port\"), got %q", address)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("nethernet address must use the \"http\" or \"https\" scheme, got %q", address)
+	if _, err := server.ParseNetherNetAddress(address); err != nil {
+		return fmt.Errorf("nethernet address %w", err)
 	}
 	return nil
 }

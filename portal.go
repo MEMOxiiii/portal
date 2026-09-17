@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"errors"
 	"fmt"
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
@@ -169,9 +170,7 @@ func (p *Portal) Close() error {
 	}
 	err := p.listener.Close()
 	if p.netherNet != nil {
-		if nnErr := p.netherNet.Close(); nnErr != nil && err == nil {
-			err = nnErr
-		}
+		err = errors.Join(err, p.netherNet.Close())
 	}
 	return err
 }

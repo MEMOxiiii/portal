@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/df-mc/go-nethernet"
-	"github.com/df-mc/go-nethernet/endpoint"
 )
 
 func TestNetherNetDialAddress(t *testing.T) {
@@ -22,6 +21,7 @@ func TestNetherNetDialAddress(t *testing.T) {
 		{name: "https with port", in: "https://example.com:19133", want: "https://example.com:19133:19133"},
 		{name: "no port", in: "http://127.0.0.1", wantErr: true},
 		{name: "not a url", in: "127.0.0.1:19135", wantErr: true},
+		{name: "has a path", in: "http://127.0.0.1:19135/nethernet", wantErr: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -42,31 +42,19 @@ func TestNetherNetDialAddress(t *testing.T) {
 	}
 }
 
-// stubNotifier records every signal it receives.
-type stubNotifier struct {
-	received []*nethernet.Signal
-}
-
-func (s *stubNotifier) NotifySignal(signal *nethernet.Signal) bool {
-	s.received = append(s.received, signal)
-	return true
-}
-
-func TestNetherNetRewritingNotifier(t *testing.T) {
-	stub := &stubNotifier{}
-	notifier := netherNetRewritingNotifier{Notifier: stub, from: "clean", to: "dirty"}
-
-	notifier.NotifySignal(&nethernet.Signal{NetworkID: "clean", ConnectionID: 1})
-	notifier.NotifySignal(&nethernet.Signal{NetworkID: "unrelated", ConnectionID: 2})
-
-	if len(stub.received) != 2 {
-		t.Fatalf("got %d received signals, want 2", len(stub.received))
+func TestRewriteNetherNetSignal(t *testing.T) {
+	matching := rewriteNetherNetSignal(&nethernet.Signal{NetworkID: "clean", ConnectionID: 1}, "clean", "dirty")
+	if matching.NetworkID != "dirty" {
+		t.Fatalf("matching signal NetworkID = %q, want %q (rewritten)", matching.NetworkID, "dirty")
 	}
-	if got := stub.received[0].NetworkID; got != "dirty" {
-		t.Fatalf("matching signal NetworkID = %q, want %q (rewritten)", got, "dirty")
+	if matching.ConnectionID != 1 {
+		t.Fatalf("matching signal ConnectionID = %d, want 1 (preserved)", matching.ConnectionID)
 	}
-	if got := stub.received[1].NetworkID; got != "unrelated" {
-		t.Fatalf("non-matching signal NetworkID = %q, want %q (untouched)", got, "unrelated")
+
+	unrelated := &nethernet.Signal{NetworkID: "unrelated", ConnectionID: 2}
+	got := rewriteNetherNetSignal(unrelated, "clean", "dirty")
+	if got != unrelated {
+		t.Fatalf("non-matching signal was copied/rewritten, want the original pointer returned untouched")
 	}
 }
 
@@ -83,22 +71,16 @@ func TestNetherNetDialSignalingUsesCleanURL(t *testing.T) {
 	defer srv.Close()
 
 	clean := srv.URL
-	dirty, err := netherNetDialAddress(clean)
+	signaling, err := newNetherNetDialSignaling(clean)
 	if err != nil {
-		t.Fatalf("netherNetDialAddress(%q) error: %v", clean, err)
-	}
-
-	signaling := &netherNetDialSignaling{
-		Client: endpoint.NewClient(),
-		dirty:  dirty,
-		clean:  clean,
+		t.Fatalf("newNetherNetDialSignaling(%q) error: %v", clean, err)
 	}
 
 	// Signal targets s.clean regardless of what NetworkID the caller (nethernet.Dialer, normally) passes
-	// in -- here, dirty, matching how session.dial actually calls it.
+	// in -- here, signaling.dirty, matching how session.dial actually calls it.
 	err = signaling.Signal(context.Background(), &nethernet.Signal{
 		Type:      nethernet.SignalTypeOffer,
-		NetworkID: dirty,
+		NetworkID: signaling.dirty,
 		Data:      "test-offer",
 	})
 	// The stub server's numeric response body ("0") is reported back as a negotiation error, which is

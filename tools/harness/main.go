@@ -538,6 +538,8 @@ func testHealthCheck() {
 
 func testWeightedLoadBalancing() {
 	reg := server.NewDefaultRegistry()
+	reg.AddServer(server.New("w1", "127.0.0.1:1", server.TransportRakNet, "lobby", 1, false))
+	reg.AddServer(server.New("w3", "127.0.0.1:2", server.TransportRakNet, "lobby", 3, false))
 	lb := session.NewGroupedLoadBalancer(reg, "lobby")
 
 	const total = 1000

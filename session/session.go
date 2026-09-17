@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/df-mc/go-nethernet/endpoint"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/google/uuid"
 	"github.com/paroxity/portal/event"
@@ -119,6 +118,11 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 	return s, nil
 }
 
+// dialTimeout bounds how long dialing a backend server may take, matching the 30s timeout
+// minecraft.Dialer.Dial applies internally for RakNet, which DialContextNetwork (used for the NetherNet
+// path) does not apply on its own.
+const dialTimeout = 30 * time.Second
+
 // dial dials a new connection to the provided server. It then returns the connection between the proxy and
 // that server, along with any error that may have occurred.
 func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
@@ -153,16 +157,17 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 		// but its own login validation additionally requires that address to have its port doubled (see
 		// netherNetDialAddress) for a NetherNet connection -- a form the signaling endpoint itself can't
 		// be dialed with directly. netherNetDialSignaling reconciles the two: see its doc comment.
-		dirty, err := netherNetDialAddress(srv.Address())
+		signaling, err := newNetherNetDialSignaling(srv.Address())
 		if err != nil {
 			return nil, fmt.Errorf("dial server %q: %w", srv.Name(), err)
 		}
-		signaling := &netherNetDialSignaling{
-			Client: endpoint.NewClient(),
-			dirty:  dirty,
-			clean:  srv.Address(),
-		}
-		return dialer.DialContextNetwork(context.Background(), minecraft.NetherNet{Signaling: signaling}, dirty)
+		// dialer.Dial's raknet path bounds itself to 30s internally (see gophertunnel's Dialer.Dial); do
+		// the same here explicitly, since DialContextNetwork uses whatever context it's given verbatim and
+		// would otherwise block forever -- holding the caller's loginMu locked -- against a backend whose
+		// signaling endpoint or WebRTC negotiation hangs.
+		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+		defer cancel()
+		return dialer.DialContextNetwork(ctx, minecraft.NetherNet{Signaling: signaling}, signaling.dirty)
 	case server.TransportRakNet, "":
 		return dialer.Dial("raknet", srv.Address())
 	default:

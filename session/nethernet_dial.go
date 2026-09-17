@@ -3,15 +3,17 @@ package session
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/df-mc/go-nethernet"
 	"github.com/df-mc/go-nethernet/endpoint"
+	"github.com/paroxity/portal/server"
 )
 
 // netherNetDialAddress derives the address gophertunnel's login validation requires in
 // login.ClientData.ServerAddress for a NetherNet connection, from signalingURL, the clean
-// "scheme://host:port" URL of a backend server's signaling endpoint.
+// "scheme://host:port" URL of a backend server's signaling endpoint. signalingURL is validated with
+// server.ParseNetherNetAddress -- the same function RegisterServer registration uses -- so a server that
+// passed registration can never fail here with a different opinion of what's a valid address.
 //
 // gophertunnel's ClientData validation (minecraft/protocol/login/data.go) expects a NetherNet
 // ServerAddress in the literal form "scheme://host:port:port" -- the port repeated a second time after
@@ -22,15 +24,11 @@ import (
 // what gets passed to Dial, and netherNetDialSignaling translates it back to the clean URL before it
 // reaches the network.
 func netherNetDialAddress(signalingURL string) (string, error) {
-	u, err := url.Parse(signalingURL)
+	u, err := server.ParseNetherNetAddress(signalingURL)
 	if err != nil {
-		return "", fmt.Errorf("parse nethernet address: %w", err)
+		return "", fmt.Errorf("nethernet address %w", err)
 	}
-	port := u.Port()
-	if port == "" {
-		return "", fmt.Errorf("nethernet address %q has no port", signalingURL)
-	}
-	return signalingURL + ":" + port, nil
+	return signalingURL + ":" + u.Port(), nil
 }
 
 // netherNetDialSignaling adapts an *endpoint.Client so a dial can use netherNetDialAddress's doubled-port
@@ -52,6 +50,17 @@ type netherNetDialSignaling struct {
 	clean string
 }
 
+// newNetherNetDialSignaling builds the Signaling used to dial a NetherNet backend at the clean signaling
+// URL clean, deriving the doubled-port form internally so callers never handle dirty/clean as two loose
+// strings that could be transposed by mistake.
+func newNetherNetDialSignaling(clean string) (*netherNetDialSignaling, error) {
+	dirty, err := netherNetDialAddress(clean)
+	if err != nil {
+		return nil, err
+	}
+	return &netherNetDialSignaling{Client: endpoint.NewClient(), dirty: dirty, clean: clean}, nil
+}
+
 // Signal rewrites signal.NetworkID from dirty to clean before delegating to the underlying endpoint.Client,
 // so the HTTP request it builds targets the server's real signaling URL rather than the doubled-port form.
 func (s *netherNetDialSignaling) Signal(ctx context.Context, signal *nethernet.Signal) error {
@@ -64,21 +73,23 @@ func (s *netherNetDialSignaling) Signal(ctx context.Context, signal *nethernet.S
 // nethernet.Dialer's own correlation of incoming signals -- which expects dirty, the value it was given as
 // networkID -- keeps matching.
 func (s *netherNetDialSignaling) Notify(n nethernet.Notifier) (stop func()) {
-	return s.Client.Notify(netherNetRewritingNotifier{Notifier: n, from: s.clean, to: s.dirty})
+	return s.Client.Notify(netherNetNotifierFunc(func(signal *nethernet.Signal) bool {
+		return n.NotifySignal(rewriteNetherNetSignal(signal, s.clean, s.dirty))
+	}))
 }
 
-// netherNetRewritingNotifier rewrites the NetworkID of a signal matching "from" to "to" before forwarding
-// it to the wrapped Notifier, leaving any signal with a different NetworkID untouched.
-type netherNetRewritingNotifier struct {
-	nethernet.Notifier
-	from, to string
-}
-
-func (n netherNetRewritingNotifier) NotifySignal(signal *nethernet.Signal) bool {
-	if signal.NetworkID != n.from {
-		return n.Notifier.NotifySignal(signal)
+// rewriteNetherNetSignal returns signal unchanged unless its NetworkID equals from, in which case it
+// returns a shallow copy with NetworkID replaced by to.
+func rewriteNetherNetSignal(signal *nethernet.Signal, from, to string) *nethernet.Signal {
+	if signal.NetworkID != from {
+		return signal
 	}
 	rewritten := *signal
-	rewritten.NetworkID = n.to
-	return n.Notifier.NotifySignal(&rewritten)
+	rewritten.NetworkID = to
+	return &rewritten
 }
+
+// netherNetNotifierFunc adapts a function to nethernet.Notifier.
+type netherNetNotifierFunc func(signal *nethernet.Signal) bool
+
+func (f netherNetNotifierFunc) NotifySignal(signal *nethernet.Signal) bool { return f(signal) }
