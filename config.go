@@ -17,6 +17,25 @@ type Config struct {
 		// Address is the address on which the proxy should listen. Players may connect to this address in
 		// order to join. It should be in the format of "ip:port".
 		Address string `json:"address"`
+		// Transport selects the player-facing listener's transport: "nethernet" (default) or "raknet".
+		Transport string `json:"transport"`
+		// NetherNet holds settings used only when Transport is "nethernet".
+		NetherNet struct {
+			// TLS optionally serves the signaling endpoint over HTTPS instead of plain HTTP.
+			TLS struct {
+				CertFile string `json:"cert_file"`
+				KeyFile  string `json:"key_file"`
+			} `json:"tls"`
+			// ICEServers lists the STUN/TURN servers offered for WebRTC NAT traversal.
+			ICEServers []struct {
+				URLs     []string `json:"urls"`
+				Username string   `json:"username"`
+				Password string   `json:"password"`
+			} `json:"ice_servers"`
+			// UDPPorts is the UDP port, or "min-max" range, for the WebRTC game connection. Must be
+			// reachable through any firewall/NAT and not overlap a RakNet listener's port.
+			UDPPorts string `json:"udp_ports"`
+		} `json:"nethernet"`
 		// FlushRateMS is the maximum time client-bound packets wait before Portal sends them. Lower values
 		// reduce relay latency at the cost of more frequent compression and network writes.
 		FlushRateMS int `json:"flush_rate_ms"`
@@ -158,6 +177,8 @@ type Config struct {
 // DefaultConfig returns a configuration with the default values filled out.
 func DefaultConfig() (c Config) {
 	c.Network.Address = ":19132"
+	c.Network.Transport = "nethernet"
+	c.Network.NetherNet.UDPPorts = "19133"
 	c.Network.FlushRateMS = 20
 	c.Network.Communication.Address = ":19131"
 	c.Network.ReaderLimits = true

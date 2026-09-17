@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/df-mc/go-nethernet"
 	"github.com/sandertv/gophertunnel/minecraft/text"
 )
 
@@ -100,12 +101,27 @@ func (g *SimpleIPGuard) Allow(addr net.Addr) (bool, string) {
 	return true, ""
 }
 
-// ipHostOf returns the host portion of a net.Addr, falling back to its full string form if it cannot be
-// split into a host and port.
+// ipHostOf returns the host portion of a net.Addr. A *nethernet.Addr's String form isn't a plain
+// "host:port" pair, so its underlying candidate address is extracted instead.
 func ipHostOf(addr net.Addr) string {
+	if a, ok := addr.(*nethernet.Addr); ok {
+		return netherNetHostOf(a)
+	}
 	host, _, err := net.SplitHostPort(addr.String())
 	if err != nil {
 		return addr.String()
 	}
 	return host
+}
+
+// netherNetHostOf returns the selected ICE candidate's address, falling back to the first signaled
+// candidate, then to the Addr's string form.
+func netherNetHostOf(addr *nethernet.Addr) string {
+	if addr.SelectedCandidate != nil {
+		return addr.SelectedCandidate.Address
+	}
+	if len(addr.Candidates) > 0 {
+		return addr.Candidates[0].Address
+	}
+	return addr.String()
 }

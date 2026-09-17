@@ -4,8 +4,12 @@ import "github.com/sandertv/gophertunnel/minecraft/protocol"
 
 // RegisterServer is sent by a connection to register itself as a server with the provided address.
 type RegisterServer struct {
-	// Address is the address of the server in the format ip:port.
+	// Address is the address of the server. For Transport "raknet" this is a "host:port" pair. For
+	// Transport "nethernet" this is the URL of the server's HTTP(S) signaling endpoint.
 	Address string
+	// Transport is the network transport the proxy should use to dial this server: "raknet" or
+	// "nethernet".
+	Transport string
 	// LegacyAuth indicates whether the proxy should use legacy authentication when dialing this server.
 	// PocketMine servers require legacy auth (true), while GeyserMC servers require new auth (false).
 	LegacyAuth bool
@@ -26,6 +30,7 @@ func (pk *RegisterServer) ID() uint16 {
 // Marshal ...
 func (pk *RegisterServer) Marshal(w *protocol.Writer) {
 	w.String(&pk.Address)
+	w.String(&pk.Transport)
 	w.Bool(&pk.LegacyAuth)
 	w.String(&pk.Group)
 	w.Varuint32(&pk.Weight)
@@ -34,6 +39,7 @@ func (pk *RegisterServer) Marshal(w *protocol.Writer) {
 // Unmarshal ...
 func (pk *RegisterServer) Unmarshal(r *protocol.Reader) {
 	r.String(&pk.Address)
+	r.String(&pk.Transport)
 	r.Bool(&pk.LegacyAuth)
 	r.String(&pk.Group)
 	r.Varuint32(&pk.Weight)

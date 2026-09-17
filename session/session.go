@@ -1,7 +1,9 @@
 package session
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -116,6 +118,10 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 	return s, nil
 }
 
+// dialTimeout matches the 30s timeout minecraft.Dialer.Dial applies internally for RakNet, which
+// DialContextNetwork (used for NetherNet) doesn't apply on its own.
+const dialTimeout = 30 * time.Second
+
 // dial dials a new connection to the provided server. It then returns the connection between the proxy and
 // that server, along with any error that may have occurred.
 func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
@@ -133,12 +139,30 @@ func (s *Session) dial(srv *server.Server) (*minecraft.Conn, error) {
 	if srv.LegacyAuth() {
 		i.XUID = ""
 	}
-	return minecraft.Dialer{
+	dialer := minecraft.Dialer{
 		ClientData:          c,
 		IdentityData:        i,
 		EnableLegacyAuth:    srv.LegacyAuth(),
 		KeepXBLIdentityData: !srv.LegacyAuth(),
-	}.Dial("raknet", srv.Address())
+	}
+
+	switch srv.Transport() {
+	case server.TransportNetherNet:
+		// See newNetherNetDialSignaling's doc comment for why this isn't just endpoint.NewClient().
+		signaling, err := newNetherNetDialSignaling(srv.Address())
+		if err != nil {
+			return nil, fmt.Errorf("dial server %q: %w", srv.Name(), err)
+		}
+		// DialContextNetwork doesn't apply dialer.Dial's own 30s bound; without this, a hung backend
+		// blocks forever and holds the caller's loginMu locked.
+		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+		defer cancel()
+		return dialer.DialContextNetwork(ctx, minecraft.NetherNet{Signaling: signaling}, signaling.dirty)
+	case server.TransportRakNet, "":
+		return dialer.Dial("raknet", srv.Address())
+	default:
+		return nil, fmt.Errorf("dial server %q: unknown transport %q", srv.Name(), srv.Transport())
+	}
 }
 
 // login performs the initial login sequence for the session.
@@ -394,7 +418,7 @@ func (s *Session) clearEntities() {
 
 // clearPlayerList flushes the playerList map and removes all the entries for the client.
 func (s *Session) clearPlayerList() {
-	var entries = make([]protocol.PlayerListEntry, s.playerList.Size())
+	var entries = make([]protocol.PlayerListEntry, 0, s.playerList.Size())
 	s.playerList.Each(func(uid [16]byte) bool {
 		entries = append(entries, protocol.PlayerListEntry{ActionType: protocol.PlayerListActionRemove, UUID: uid})
 		return true

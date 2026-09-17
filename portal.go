@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"errors"
 	"fmt"
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/internal"
@@ -14,9 +15,12 @@ import (
 type Portal struct {
 	log internal.Logger
 
-	address      string
-	listenConfig minecraft.ListenConfig
-	listener     *minecraft.Listener
+	address       string
+	transport     Transport
+	netherNetOpts NetherNetOptions
+	listenConfig  minecraft.ListenConfig
+	listener      *minecraft.Listener
+	netherNet     *netherNetListener
 
 	sessionStore   *session.Store
 	serverRegistry *server.Registry
@@ -42,11 +46,17 @@ func New(opts Options) *Portal {
 	if opts.IPGuard == nil {
 		opts.IPGuard = session.NopIPGuard{}
 	}
+	transport := opts.Transport
+	if transport == "" {
+		transport = TransportNetherNet
+	}
 	return &Portal{
 		log: opts.Logger,
 
-		address:      opts.Address,
-		listenConfig: opts.ListenConfig,
+		address:       opts.Address,
+		transport:     transport,
+		netherNetOpts: opts.NetherNet,
+		listenConfig:  opts.ListenConfig,
 
 		sessionStore:   session.NewDefaultStore(),
 		serverRegistry: serverRegistry,
@@ -91,11 +101,29 @@ func (p *Portal) SetLoadBalancer(loadBalancer session.LoadBalancer) {
 // Listen starts to listen on the set address and allows connections from minecraft clients. An error is
 // returned if the listener failed to listen.
 func (p *Portal) Listen() error {
-	l, err := p.listenConfig.Listen("raknet", p.address)
-	if err != nil {
-		return err
+	switch p.transport {
+	case TransportRakNet:
+		l, err := p.listenConfig.Listen("raknet", p.address)
+		if err != nil {
+			return err
+		}
+		p.listener = l
+	case TransportNetherNet:
+		network, nn, err := newNetherNetNetwork(p.address, p.netherNetOpts, p.log)
+		if err != nil {
+			return err
+		}
+		l, err := p.listenConfig.ListenNetwork(network, p.address)
+		if err != nil {
+			_ = nn.Close()
+			return err
+		}
+		go nn.serve()
+		p.listener = l
+		p.netherNet = nn
+	default:
+		return fmt.Errorf("portal: unknown transport %q, must be %q or %q", p.transport, TransportNetherNet, TransportRakNet)
 	}
-	p.listener = l
 	return nil
 }
 
@@ -140,5 +168,9 @@ func (p *Portal) Close() error {
 	if p.listener == nil {
 		return nil
 	}
-	return p.listener.Close()
+	err := p.listener.Close()
+	if p.netherNet != nil {
+		err = errors.Join(err, p.netherNet.Close())
+	}
+	return err
 }

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/df-mc/go-nethernet"
 	"github.com/paroxity/portal"
 	"github.com/paroxity/portal/cluster"
 	"github.com/paroxity/portal/event"
@@ -61,10 +62,26 @@ func main() {
 		logger.Infof("resource pack hot reload enabled with %s interval", interval)
 	}
 
+	iceServers := make([]nethernet.ICEServer, 0, len(conf.Network.NetherNet.ICEServers))
+	for _, s := range conf.Network.NetherNet.ICEServers {
+		iceServers = append(iceServers, nethernet.ICEServer{
+			URLs:     s.URLs,
+			Username: s.Username,
+			Password: s.Password,
+		})
+	}
+
 	p := portal.New(portal.Options{
 		Logger: logger,
 
-		Address: conf.Network.Address,
+		Address:   conf.Network.Address,
+		Transport: portal.Transport(conf.Network.Transport),
+		NetherNet: portal.NetherNetOptions{
+			TLSCertFile: conf.Network.NetherNet.TLS.CertFile,
+			TLSKeyFile:  conf.Network.NetherNet.TLS.KeyFile,
+			ICEServers:  iceServers,
+			UDPPorts:    conf.Network.NetherNet.UDPPorts,
+		},
 		ListenConfig: minecraft.ListenConfig{
 			StatusProvider: portal.NewMOTDStatusProvider(conf.MOTD).SubMOTD(conf.SubMOTD),
 			FlushRate:      time.Duration(conf.Network.FlushRateMS) * time.Millisecond,

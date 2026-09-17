@@ -11,6 +11,12 @@ func TestDefaultFlushRate(t *testing.T) {
 	}
 }
 
+func TestDefaultTransport(t *testing.T) {
+	if got := DefaultConfig().Network.Transport; got != string(TransportNetherNet) {
+		t.Fatalf("default transport = %q, want %q", got, TransportNetherNet)
+	}
+}
+
 func TestFlushRateConfigCompatibility(t *testing.T) {
 	tests := []struct {
 		name string

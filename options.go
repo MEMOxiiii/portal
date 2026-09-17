@@ -18,6 +18,11 @@ type Options struct {
 	// and add resource packs etc.
 	ListenConfig minecraft.ListenConfig
 
+	// Transport selects the player-facing listener's transport. Empty defaults to TransportNetherNet.
+	Transport Transport
+	// NetherNet holds settings used only when Transport is TransportNetherNet.
+	NetherNet NetherNetOptions
+
 	// LoadBalancer is the method used to balance load across the servers on the proxy. It can be used to
 	// change which servers players connect to when they join the proxy.
 	LoadBalancer session.LoadBalancer
