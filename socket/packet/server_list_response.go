@@ -40,9 +40,13 @@ func (pk *ServerListResponse) Unmarshal(r *protocol.Reader) {
 	var l uint32
 	r.Uint32(&l)
 
-	pk.Servers = make([]ServerEntry, l)
+	// Not preallocated to l: l comes straight off the wire, so a bogus, huge value must not translate into
+	// a huge up-front allocation. append grows only as far as entries are actually read.
+	pk.Servers = nil
 	for i := uint32(0); i < l; i++ {
-		r.String(&pk.Servers[i].Name)
-		r.Int64(&pk.Servers[i].PlayerCount)
+		var e ServerEntry
+		r.String(&e.Name)
+		r.Int64(&e.PlayerCount)
+		pk.Servers = append(pk.Servers, e)
 	}
 }
