@@ -21,7 +21,9 @@ func (*AuthRequestHandler) Handle(p packet.Packet, srv Server, c *Client) error 
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": unsupported protocol version %d", pk.Name, pk.Protocol)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseUnsupportedProtocol})
 	}
-	if subtle.ConstantTimeCompare([]byte(pk.Secret), []byte(srv.Secret())) != 1 {
+	// An empty configured secret must never authenticate anything, regardless of what the client sends:
+	// otherwise a server constructed without an explicit secret would silently accept every connection.
+	if srv.Secret() == "" || subtle.ConstantTimeCompare([]byte(pk.Secret), []byte(srv.Secret())) != 1 {
 		srv.RecordAuthFailure(c.conn.RemoteAddr())
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": incorrect secret provided", pk.Name)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseIncorrectSecret})
