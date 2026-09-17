@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -278,6 +280,8 @@ func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, clust
 func readConfig(logger internal.Logger) portal.Config {
 	c := portal.DefaultConfig()
 	if _, err := os.Stat("config.json"); os.IsNotExist(err) {
+		c.Network.Communication.Secret = generateSecret(logger)
+
 		// 0600: config.json holds the socket secret (and, if clustering is enabled, the Redis password).
 		f, err := os.OpenFile("config.json", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
@@ -302,5 +306,20 @@ func readConfig(logger internal.Logger) portal.Config {
 	if c.Network.FlushRateMS < 0 {
 		logger.Fatalf("network.flush_rate_ms must not be negative")
 	}
+	if c.Network.Communication.Secret == "" {
+		// An empty secret makes AuthRequestHandler accept any (or no) secret, letting anyone who can
+		// reach network.communication.address register as a backend and issue backend-only requests.
+		logger.Fatalf("network.communication.secret must be set")
+	}
 	return c
+}
+
+// generateSecret returns a random 32-byte secret hex-encoded for use as the default
+// network.communication.secret in a freshly created config.json.
+func generateSecret(logger internal.Logger) string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		logger.Fatalf("error generating communication secret: %v", err)
+	}
+	return hex.EncodeToString(b)
 }
