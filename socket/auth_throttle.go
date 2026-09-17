@@ -19,9 +19,10 @@ const (
 // authThrottle tracks failed socket authentication attempts per IP address and temporarily blocks IPs
 // that repeatedly fail to authenticate, mitigating brute-force attempts against the shared secret.
 type authThrottle struct {
-	mu    sync.Mutex
-	state map[string]*ipAuthState
-	stop  chan struct{}
+	mu       sync.Mutex
+	state    map[string]*ipAuthState
+	stop     chan struct{}
+	closeOne sync.Once
 }
 
 type ipAuthState struct {
@@ -62,9 +63,11 @@ func (t *authThrottle) cleanup() {
 	}
 }
 
-// Close stops the throttle's background cleanup goroutine.
+// Close stops the throttle's background cleanup goroutine. Safe to call more than once.
 func (t *authThrottle) Close() {
-	close(t.stop)
+	t.closeOne.Do(func() {
+		close(t.stop)
+	})
 }
 
 // Blocked returns whether the IP of the provided address is currently blocked from authenticating.
