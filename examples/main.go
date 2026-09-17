@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -279,7 +278,8 @@ func waitForShutdown(p *portal.Portal, socketServer *socket.DefaultServer, clust
 func readConfig(logger internal.Logger) portal.Config {
 	c := portal.DefaultConfig()
 	if _, err := os.Stat("config.json"); os.IsNotExist(err) {
-		f, err := os.Create("config.json")
+		// 0600: config.json holds the socket secret (and, if clustering is enabled, the Redis password).
+		f, err := os.OpenFile("config.json", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			logger.Fatalf("error creating config: %v", err)
 		}
@@ -292,7 +292,7 @@ func readConfig(logger internal.Logger) portal.Config {
 		}
 		_ = f.Close()
 	}
-	data, err := ioutil.ReadFile("config.json")
+	data, err := os.ReadFile("config.json")
 	if err != nil {
 		logger.Fatalf("error reading config: %v", err)
 	}
