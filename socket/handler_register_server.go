@@ -22,7 +22,15 @@ func (*RegisterServerHandler) Handle(p packet.Packet, srv Server, c *Client) err
 		srv.Logger().Errorf("socket connection \"%s\" sent an invalid RegisterServer packet: %v", c.Name(), err)
 		return err
 	}
-	srv.ServerRegistry().AddServer(server.New(c.Name(), pk.Address, transport, pk.Group, pk.Weight, pk.LegacyAuth))
+	newSrv := server.New(c.Name(), pk.Address, transport, pk.Group, pk.Weight, pk.LegacyAuth)
+	if old, ok := srv.ServerRegistry().Server(c.Name()); ok {
+		// A re-registration (e.g. a retry after a delayed ack) must not reset state that reflects reality --
+		// players actually connected, actual health/draining status -- back to defaults.
+		newSrv.SetDraining(old.Draining())
+		newSrv.SetHealthy(old.Healthy())
+		newSrv.SetPlayerCount(old.PlayerCount())
+	}
+	srv.ServerRegistry().AddServer(newSrv)
 	srv.Logger().Debugf("socket connection \"%s\" has registered itself as a server with the address \"%s\" (transport=%s, group=%q, weight=%d, legacyAuth=%v)", c.Name(), pk.Address, transport, pk.Group, pk.Weight, pk.LegacyAuth)
 	if events := srv.Events(); events != nil {
 		events.Publish(event.TopicServerRegistered, event.ServerPayload{Name: c.Name(), Address: pk.Address})

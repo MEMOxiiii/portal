@@ -111,3 +111,10 @@ func (s *Server) DecrementPlayerCount() {
 func (s *Server) PlayerCount() int {
 	return int(s.playerCount.Load())
 }
+
+// SetPlayerCount sets the player count directly, bypassing IncrementPlayerCount/DecrementPlayerCount. Used
+// when a server re-registers under a name already in the registry, to carry the count of players actually
+// connected to it over to its replacement entry instead of resetting it to zero.
+func (s *Server) SetPlayerCount(n int) {
+	s.playerCount.Store(int64(n))
+}
