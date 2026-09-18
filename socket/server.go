@@ -158,7 +158,7 @@ func (s *DefaultServer) handleClient(c *Client) {
 	s.unconnectedClients[c.conn.RemoteAddr()] = c
 	s.clientsMu.Unlock()
 
-	_ = c.conn.SetReadDeadline(time.Now().Add(authTimeout))
+	_ = c.conn.SetDeadline(time.Now().Add(authTimeout))
 
 	for {
 		if !c.Authenticated() && s.AuthBlocked(c.conn.RemoteAddr()) {
@@ -190,6 +190,8 @@ func (s *DefaultServer) handleClient(c *Client) {
 			}
 			if err := h.Handle(pk, s, c); err != nil {
 				s.log.Errorf("socket server unable to handle packet: %v", err)
+			} else if c.Authenticated() {
+				_ = c.conn.SetDeadline(time.Time{})
 			}
 		} else {
 			if c.name == "" {
@@ -197,10 +199,6 @@ func (s *DefaultServer) handleClient(c *Client) {
 			} else {
 				s.log.Debugf("unhandled packet %T from %s socket connection", pk, c.name)
 			}
-		}
-
-		if c.Authenticated() {
-			_ = c.conn.SetReadDeadline(time.Time{})
 		}
 	}
 }
