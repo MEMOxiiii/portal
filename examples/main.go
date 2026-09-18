@@ -223,9 +223,10 @@ func main() {
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", metrics.Default.Handler())
+		metricsServer := &http.Server{Addr: conf.Metrics.Address, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 		go func() {
 			logger.Infof("metrics endpoint listening on %s", conf.Metrics.Address)
-			if err := http.ListenAndServe(conf.Metrics.Address, mux); err != nil {
+			if err := metricsServer.ListenAndServe(); err != nil {
 				logger.Errorf("metrics server failed: %v", err)
 			}
 		}()
