@@ -12,7 +12,12 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
+
+// authTimeout bounds how long an accepted connection has to authenticate before it's dropped. A var, not a
+// const, so tests can shrink it.
+var authTimeout = 10 * time.Second
 
 type Server interface {
 	// Listen starts listening for connections on an address.
@@ -26,11 +31,12 @@ type Server interface {
 
 	// Clients returns all the clients that are connected to the socket server.
 	Clients() []*Client
-	// Client attempts to return a client from the provided name, case-sensitive.
+	// Client attempts to return a client from the provided name, case-insensitive.
 	Client(name string) (*Client, bool)
-	// Authenticate marks the client as authenticated with the provided name. It is safe to assume that the provided
-	// name is not in use, unless called by places other than the socket server.
-	Authenticate(c *Client, name string)
+	// TryAuthenticate atomically marks c as authenticated with the provided name (case-insensitive) and
+	// returns true, unless a different client is already authenticated with that name, in which case it
+	// returns false without changing anything.
+	TryAuthenticate(c *Client, name string) bool
 
 	// AuthBlocked returns whether the remote address has failed authentication too many times recently and
 	// is temporarily blocked from authenticating.
@@ -152,6 +158,8 @@ func (s *DefaultServer) handleClient(c *Client) {
 	s.unconnectedClients[c.conn.RemoteAddr()] = c
 	s.clientsMu.Unlock()
 
+	_ = c.conn.SetReadDeadline(time.Now().Add(authTimeout))
+
 	for {
 		if !c.Authenticated() && s.AuthBlocked(c.conn.RemoteAddr()) {
 			s.log.Debugf("closing socket connection from %s: too many failed authentication attempts", c.conn.RemoteAddr())
@@ -162,6 +170,11 @@ func (s *DefaultServer) handleClient(c *Client) {
 		pk, err := c.ReadPacket()
 		if err != nil {
 			if containsAny(err.Error(), "EOF", "closed") {
+				return
+			}
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				s.log.Debugf("closing socket connection from %s: timed out waiting for authentication", c.conn.RemoteAddr())
+				_ = c.Close()
 				return
 			}
 			s.log.Errorf("socket server unable to read packet: %v", err)
@@ -185,20 +198,34 @@ func (s *DefaultServer) handleClient(c *Client) {
 				s.log.Debugf("unhandled packet %T from %s socket connection", pk, c.name)
 			}
 		}
+
+		if c.Authenticated() {
+			_ = c.conn.SetReadDeadline(time.Time{})
+		}
 	}
 }
 
 // handleClientDisconnect handles a client that has been disconnected from the socket server.
 func (s *DefaultServer) handleClientDisconnect(c *Client) {
+	name := c.Name()
+
 	s.clientsMu.Lock()
-	defer s.clientsMu.Unlock()
-	delete(s.clients, c.Name())
+	owned := name != "" && s.clients[strings.ToLower(name)] == c
+	if owned {
+		delete(s.clients, strings.ToLower(name))
+	}
 	delete(s.unconnectedClients, c.conn.RemoteAddr())
-	s.log.Debugf("socket connection \"%s\" closed", c.name)
-	srv, ok := s.serverRegistry.Server(c.Name())
+	s.clientsMu.Unlock()
+
+	s.log.Debugf("socket connection \"%s\" closed", name)
+	if !owned {
+		return
+	}
+
+	srv, ok := s.serverRegistry.Server(name)
 	if ok {
 		s.serverRegistry.RemoveServer(srv)
-		s.log.Debugf("removed server for socket connection \"%s\"", c.Name())
+		s.log.Debugf("removed server for socket connection \"%s\"", name)
 		if s.events != nil {
 			s.events.Publish(event.TopicServerUnregistered, event.ServerPayload{Name: srv.Name(), Address: srv.Address()})
 		}
@@ -229,17 +256,21 @@ func (s *DefaultServer) Clients() (clients []*Client) {
 func (s *DefaultServer) Client(name string) (*Client, bool) {
 	s.clientsMu.RLock()
 	defer s.clientsMu.RUnlock()
-	client, ok := s.clients[name]
+	client, ok := s.clients[strings.ToLower(name)]
 	return client, ok
 }
 
-// Authenticate ...
-func (s *DefaultServer) Authenticate(c *Client, name string) {
+// TryAuthenticate ...
+func (s *DefaultServer) TryAuthenticate(c *Client, name string) bool {
 	s.clientsMu.Lock()
 	defer s.clientsMu.Unlock()
+	if _, ok := s.clients[strings.ToLower(name)]; ok {
+		return false
+	}
 	delete(s.unconnectedClients, c.conn.RemoteAddr())
-	s.clients[name] = c
+	s.clients[strings.ToLower(name)] = c
 	c.Authenticate(name)
+	return true
 }
 
 // AuthBlocked ...

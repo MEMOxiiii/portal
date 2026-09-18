@@ -28,13 +28,11 @@ func (*AuthRequestHandler) Handle(p packet.Packet, srv Server, c *Client) error 
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": incorrect secret provided", pk.Name)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseIncorrectSecret})
 	}
-	_, ok := srv.Client(pk.Name)
-	if ok {
+	if !srv.TryAuthenticate(c, pk.Name) {
 		srv.Logger().Errorf("failed socket authentication attempt from \"%s\": a connection already exists with this name", pk.Name)
 		return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseAlreadyConnected})
 	}
 
-	srv.Authenticate(c, pk.Name)
 	srv.Logger().Debugf("socket connection \"%s\" successfully authenticated", pk.Name)
 	return c.WritePacket(&packet.AuthResponse{Status: packet.AuthResponseSuccess})
 }
