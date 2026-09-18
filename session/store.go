@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -45,12 +46,12 @@ func (s *Store) Load(x uuid.UUID) (*Session, bool) {
 	return v, ok
 }
 
-// LoadFromName attempts to load a session from the username of a player.
+// LoadFromName attempts to load a session from the username of a player, case-insensitive.
 func (s *Store) LoadFromName(x string) (*Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	v, ok := s.sessionNames[x]
+	v, ok := s.sessionNames[strings.ToLower(x)]
 	return v, ok
 }
 
@@ -62,17 +63,19 @@ func (s *Store) Store(x *Session) {
 	s.sessions[x.UUID()] = x
 	// x.conn (not the exported Conn()) since Store/Delete can run while the session's own loginMu is still
 	// held by New()'s own goroutine on a dial/login failure; conn itself never changes after construction.
-	s.sessionNames[x.conn.IdentityData().DisplayName] = x
+	s.sessionNames[strings.ToLower(x.conn.IdentityData().DisplayName)] = x
 }
 
-// Delete deletes a session from the store.
-func (s *Store) Delete(x uuid.UUID) {
+// Delete removes x from the store, but only if it's still the session currently stored under its UUID: a
+// reconnect can create and Store a new session under the same UUID before the old one's own Close gets
+// around to calling Delete, and that must not remove the new one.
+func (s *Store) Delete(x *Session) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	v, ok := s.sessions[x]
-	if ok {
-		delete(s.sessions, x)
-		delete(s.sessionNames, v.conn.IdentityData().DisplayName)
+	if s.sessions[x.UUID()] != x {
+		return
 	}
+	delete(s.sessions, x.UUID())
+	delete(s.sessionNames, strings.ToLower(x.conn.IdentityData().DisplayName))
 }

@@ -84,7 +84,7 @@ func New(conn *minecraft.Conn, store *Store, loadBalancer LoadBalancer, log inte
 	store.Store(s)
 	defer func() {
 		if err != nil {
-			store.Delete(s.UUID())
+			store.Delete(s)
 		}
 	}()
 
@@ -520,7 +520,7 @@ func (s *Session) Close() {
 			s.bus.Publish(event.TopicPlayerQuit, event.PlayerPayload{UUID: s.uuid, Name: s.conn.IdentityData().DisplayName})
 		}
 
-		s.store.Delete(s.UUID())
+		s.store.Delete(s)
 
 		_ = s.conn.Close()
 		if s.serverConn != nil {
