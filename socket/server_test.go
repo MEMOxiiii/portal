@@ -64,9 +64,9 @@ func TestHandleClientAuthTimeout(t *testing.T) {
 // reads: a client that completed the handshake read but never read the response back could block the
 // server forever inside WritePacket.
 func TestHandleClientAuthResponseWriteTimeout(t *testing.T) {
-	old := authTimeout
-	authTimeout = 50 * time.Millisecond
-	defer func() { authTimeout = old }()
+	oldAuth, oldWrite := authTimeout, writeTimeout
+	authTimeout, writeTimeout = 50*time.Millisecond, 50*time.Millisecond
+	defer func() { authTimeout, writeTimeout = oldAuth, oldWrite }()
 
 	srv := NewDefaultServer(":0", "secret", session.NewDefaultStore(), server.NewDefaultRegistry(), nopLogger{}, false, nil)
 
