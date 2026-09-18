@@ -12,6 +12,36 @@ import (
 	"github.com/paroxity/portal/socket/packet"
 )
 
+// TestListenAcceptsAndAuthenticates is the only test exercising the real Listen()/Accept() path (every
+// other test constructs Clients directly over a net.Pipe), added alongside switching Listen() to
+// net.ListenConfig for TCP keepalive -- a real accepted connection must still authenticate successfully.
+func TestListenAcceptsAndAuthenticates(t *testing.T) {
+	srv := NewDefaultServer("127.0.0.1:0", "secret", session.NewDefaultStore(), server.NewDefaultRegistry(), nopLogger{}, false, nil)
+	if err := srv.Listen(); err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer srv.Close()
+
+	conn, err := net.Dial("tcp", srv.listener.Addr().String())
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	c := NewClient(conn, nopLogger{}, false)
+	if err := c.WritePacket(&packet.AuthRequest{Protocol: packet.ProtocolVersion, Secret: "secret", Name: "backend1"}); err != nil {
+		t.Fatalf("WritePacket: %v", err)
+	}
+	pk, err := c.ReadPacket()
+	if err != nil {
+		t.Fatalf("ReadPacket: %v", err)
+	}
+	resp, ok := pk.(*packet.AuthResponse)
+	if !ok || resp.Status != packet.AuthResponseSuccess {
+		t.Fatalf("got %#v, want a successful AuthResponse", pk)
+	}
+}
+
 // TestTryAuthenticateCaseInsensitive guards against a regression where the socket client map (case-sensitive
 // keys) and the server registry (case-insensitive keys) disagreed on identity, letting "Lobby" and "lobby"
 // both authenticate as separate connections while colliding on a single registry entry.

@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"github.com/paroxity/portal/cluster"
@@ -18,6 +19,11 @@ import (
 // authTimeout bounds how long an accepted connection has to authenticate before it's dropped. A var, not a
 // const, so tests can shrink it.
 var authTimeout = 10 * time.Second
+
+// tcpKeepAlive detects a peer that vanished without closing the connection (a crashed backend, a network
+// partition) much sooner than the OS default of ~2 hours would, so its stale client map and registry
+// entries get cleaned up promptly instead of lingering until the proxy restarts.
+const tcpKeepAlive = 30 * time.Second
 
 type Server interface {
 	// Listen starts listening for connections on an address.
@@ -114,15 +120,13 @@ func NewDefaultTLSServer(addr, secret string, sessionStore *session.Store, serve
 
 // Listen ...
 func (s *DefaultServer) Listen() error {
-	var listener net.Listener
-	var err error
-	if s.tlsConfig != nil {
-		listener, err = tls.Listen("tcp", s.addr, s.tlsConfig)
-	} else {
-		listener, err = net.Listen("tcp", s.addr)
-	}
+	lc := net.ListenConfig{KeepAlive: tcpKeepAlive}
+	listener, err := lc.Listen(context.Background(), "tcp", s.addr)
 	if err != nil {
 		return err
+	}
+	if s.tlsConfig != nil {
+		listener = tls.NewListener(listener, s.tlsConfig)
 	}
 	s.log.Infof("socket server listening on %s\n", s.addr)
 	s.listener = listener
