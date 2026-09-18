@@ -44,6 +44,7 @@ type Session struct {
 	server               *server.Server
 	serverConn           *minecraft.Conn
 	tempServerConn       *minecraft.Conn
+	pendingServer        *server.Server
 	transferConfirmTimer *time.Timer
 	transferDone         func(error)
 
@@ -331,6 +332,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 
 		s.serverMu.Lock()
 		s.tempServerConn = conn
+		s.pendingServer = srv
 		s.transferConfirmTimer = time.AfterFunc(transferConfirmTimeout, func() { s.abortStuckTransfer(srv) })
 		s.serverMu.Unlock()
 
@@ -352,12 +354,11 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 			}
 		}
 		_ = s.conn.Flush()
-
-		s.serverMu.Lock()
-		s.server.DecrementPlayerCount()
-		s.server = srv
-		s.server.IncrementPlayerCount()
-		s.serverMu.Unlock()
+		// s.server/player counts are switched over once the client actually confirms the transfer, in
+		// finishTransferDimensionChange -- not here. Setting them this early, before the client has done
+		// anything, left Server() reporting the new server while ServerConn() (and the real game traffic)
+		// were still on the old one for the whole confirmation window, permanently so if the transfer
+		// later timed out.
 	})
 
 	ctx.Stop(func() {
@@ -457,6 +458,11 @@ func (s *Session) finishTransferDimensionChange() (gameData minecraft.GameData, 
 	s.serverConn = s.tempServerConn
 	s.tempServerConn = nil
 
+	s.server.DecrementPlayerCount()
+	s.server = s.pendingServer
+	s.server.IncrementPlayerCount()
+	s.pendingServer = nil
+
 	return gameData, true
 }
 
@@ -467,6 +473,7 @@ func (s *Session) abortStuckTransfer(srv *server.Server) {
 	s.serverMu.Lock()
 	conn := s.tempServerConn
 	s.tempServerConn = nil
+	s.pendingServer = nil
 	s.transferConfirmTimer = nil
 	s.serverMu.Unlock()
 
