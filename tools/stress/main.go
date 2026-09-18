@@ -177,11 +177,26 @@ func main() {
 		time.Sleep(50 * time.Millisecond)
 	}
 	// The client counts a backend as registered once it has *sent* RegisterServer; the proxy adds it to
-	// the registry a moment later when it processes the packet. Poll briefly so the peak snapshot reflects
-	// every registration rather than racing the last few in flight.
-	regDeadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(regDeadline) && len(p.ServerRegistry().Servers()) < clients {
-		time.Sleep(20 * time.Millisecond)
+	// the registry a moment later when it processes the packet. Poll until the count stops growing rather
+	// than a fixed grace period: under -race with few cores, a burst of registrations can legitimately take
+	// several seconds to fully land, and a fixed short window reports a false failure for that, not a lost
+	// registration.
+	regDeadline := time.Now().Add(30 * time.Second)
+	lastCount, stableRounds := -1, 0
+	for time.Now().Before(regDeadline) {
+		n := len(p.ServerRegistry().Servers())
+		if n >= clients {
+			break
+		}
+		if n == lastCount {
+			stableRounds++
+			if stableRounds >= 25 { // ~1s with no further growth
+				break
+			}
+		} else {
+			lastCount, stableRounds = n, 0
+		}
+		time.Sleep(40 * time.Millisecond)
 	}
 	regDur := time.Since(startReg)
 	peak := len(p.ServerRegistry().Servers())
