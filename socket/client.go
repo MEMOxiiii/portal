@@ -11,7 +11,13 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
+
+// writeTimeout bounds every WritePacket call, so a peer that stops reading can't block a write forever --
+// unlike the read side, which is left undeadlined post-auth so an idle backend isn't killed for going quiet.
+// A var, not a const, so tests can shrink it.
+var writeTimeout = 10 * time.Second
 
 // Client represents a client connected over the TCP socket system.
 type Client struct {
@@ -133,6 +139,7 @@ func (c *Client) WritePacket(pk packet.Packet) (err error) {
 	binary.LittleEndian.PutUint32(framed, uint32(c.buf.Len()))
 	copy(framed[4:], c.buf.Bytes())
 
+	_ = c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	_, err = c.conn.Write(framed)
 	return err
 }
