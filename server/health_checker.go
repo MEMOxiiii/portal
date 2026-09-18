@@ -61,8 +61,10 @@ func (h *HealthChecker) Start(ctx context.Context) {
 
 // checkAll pings every registered server concurrently.
 func (h *HealthChecker) checkAll() {
+	current := h.registry.Servers()
+
 	var wg sync.WaitGroup
-	for _, srv := range h.registry.Servers() {
+	for _, srv := range current {
 		wg.Add(1)
 		go func(srv *Server) {
 			defer wg.Done()
@@ -70,6 +72,25 @@ func (h *HealthChecker) checkAll() {
 		}(srv)
 	}
 	wg.Wait()
+
+	h.pruneFailures(current)
+}
+
+// pruneFailures evicts failure counts for servers no longer registered, so failures doesn't grow without
+// bound over the life of a proxy whose backend server names change over time (e.g. an auto-scaled fleet).
+func (h *HealthChecker) pruneFailures(current []*Server) {
+	live := make(map[string]struct{}, len(current))
+	for _, srv := range current {
+		live[srv.Name()] = struct{}{}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for name := range h.failures {
+		if _, ok := live[name]; !ok {
+			delete(h.failures, name)
+		}
+	}
 }
 
 // check pings a single server and updates its healthy state based on the result.
