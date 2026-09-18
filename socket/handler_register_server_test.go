@@ -1,9 +1,12 @@
 package socket
 
 import (
+	"net"
 	"testing"
 
 	"github.com/paroxity/portal/server"
+	"github.com/paroxity/portal/session"
+	"github.com/paroxity/portal/socket/packet"
 )
 
 func TestParseTransport(t *testing.T) {
@@ -67,5 +70,52 @@ func TestValidateAddress(t *testing.T) {
 				t.Fatalf("validateAddress(%q, %q) error = %v, want nil", test.transport, test.address, err)
 			}
 		})
+	}
+}
+
+// TestRegisterServerHandlerPreservesStateOnReregister guards against a regression where re-registering
+// under a name already in the registry (e.g. a client library retrying after a delayed ack) replaced the
+// entry with a fresh *server.Server, silently resetting player count, health, and draining status back to
+// defaults even though players were actually still connected to it.
+func TestRegisterServerHandlerPreservesStateOnReregister(t *testing.T) {
+	srv := NewDefaultServer(":0", "secret", session.NewDefaultStore(), server.NewDefaultRegistry(), nopLogger{}, false, nil)
+
+	conn, _ := net.Pipe()
+	c := NewClient(conn, nopLogger{}, false)
+	if !srv.TryAuthenticate(c, "backend1") {
+		t.Fatal("TryAuthenticate should succeed")
+	}
+
+	h := &RegisterServerHandler{}
+	pk := &packet.RegisterServer{Address: "127.0.0.1:19132", Group: "lobby", Weight: 1}
+	if err := h.Handle(pk, srv, c); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+
+	first, ok := srv.ServerRegistry().Server("backend1")
+	if !ok {
+		t.Fatal("server not registered")
+	}
+	first.IncrementPlayerCount()
+	first.IncrementPlayerCount()
+	first.SetDraining(true)
+	first.SetHealthy(false)
+
+	if err := h.Handle(pk, srv, c); err != nil {
+		t.Fatalf("Handle (re-register): %v", err)
+	}
+
+	second, ok := srv.ServerRegistry().Server("backend1")
+	if !ok {
+		t.Fatal("server not registered after re-registering")
+	}
+	if second.PlayerCount() != 2 {
+		t.Fatalf("PlayerCount() = %d, want 2 (preserved across re-registration)", second.PlayerCount())
+	}
+	if !second.Draining() {
+		t.Fatal("Draining() = false, want true (preserved across re-registration)")
+	}
+	if second.Healthy() {
+		t.Fatal("Healthy() = true, want false (preserved across re-registration)")
 	}
 }
