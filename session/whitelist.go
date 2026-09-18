@@ -1,6 +1,8 @@
 package session
 
 import (
+	"strings"
+
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/text"
 )
@@ -15,12 +17,17 @@ type Whitelist interface {
 // SimpleWhitelist is a whitelist that, if enabled, only allows a set list of players to join.
 type SimpleWhitelist struct {
 	enabled bool
-	players []string
+	players map[string]struct{}
 }
 
-// NewSimpleWhitelist returns a simple whitelist from the enabled status and a player list passed.
+// NewSimpleWhitelist returns a simple whitelist from the enabled status and a player list passed. Names are
+// matched case-insensitively.
 func NewSimpleWhitelist(enabled bool, players []string) *SimpleWhitelist {
-	return &SimpleWhitelist{enabled, players}
+	set := make(map[string]struct{}, len(players))
+	for _, p := range players {
+		set[strings.ToLower(p)] = struct{}{}
+	}
+	return &SimpleWhitelist{enabled, set}
 }
 
 // Authorize ...
@@ -28,11 +35,8 @@ func (s *SimpleWhitelist) Authorize(conn *minecraft.Conn) (bool, string) {
 	if !s.enabled {
 		return true, ""
 	}
-	u := conn.IdentityData().DisplayName
-	for _, p := range s.players {
-		if u == p {
-			return true, ""
-		}
+	if _, ok := s.players[strings.ToLower(conn.IdentityData().DisplayName)]; ok {
+		return true, ""
 	}
 	return false, text.Colourf("<red>Server is whitelisted</red>")
 }
