@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/df-mc/go-nethernet"
 	"github.com/df-mc/go-nethernet/endpoint"
@@ -178,7 +179,7 @@ func newNetherNetNetwork(address string, opts NetherNetOptions, log internal.Log
 		},
 	}
 	return network, &netherNetListener{
-		server: &http.Server{Handler: logNetherNetRequests(log, handler)},
+		server: &http.Server{Handler: logNetherNetRequests(log, handler), ReadHeaderTimeout: 10 * time.Second},
 		l:      l,
 		udpMux: udpMux,
 	}, nil
