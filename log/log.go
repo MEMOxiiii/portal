@@ -32,10 +32,13 @@ func New(path string) (*Logger, error) {
 
 // Write ...
 func (l *Logger) Write(p []byte) (int, error) {
-	if n, err := l.stdout.Write(p); err != nil {
-		return n, err
+	if _, err := l.stdout.Write(p); err != nil {
+		return 0, err
 	}
 
 	cleaned := cleaner.ReplaceAllString(string(p), "")
-	return l.file.WriteString(time.Now().Format("2006-1-2") + " " + cleaned)
+	if _, err := l.file.WriteString(time.Now().Format("2006-1-2") + " " + cleaned); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
