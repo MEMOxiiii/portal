@@ -209,24 +209,25 @@ func (s *DefaultServer) handleClientDisconnect(c *Client) {
 
 	s.clientsMu.Lock()
 	owned := name != "" && s.clients[strings.ToLower(name)] == c
+	var srv *server.Server
 	if owned {
 		delete(s.clients, strings.ToLower(name))
+		// Looked up here, not after unlocking below: while owned is true, no other connection could have
+		// registered under name yet, so this is guaranteed to be c's own registration, not a replacement's.
+		srv, _ = s.serverRegistry.Server(name)
 	}
 	delete(s.unconnectedClients, c.conn.RemoteAddr())
 	s.clientsMu.Unlock()
 
 	s.log.Debugf("socket connection \"%s\" closed", name)
-	if !owned {
+	if srv == nil {
 		return
 	}
 
-	srv, ok := s.serverRegistry.Server(name)
-	if ok {
-		s.serverRegistry.RemoveServer(srv)
-		s.log.Debugf("removed server for socket connection \"%s\"", name)
-		if s.events != nil {
-			s.events.Publish(event.TopicServerUnregistered, event.ServerPayload{Name: srv.Name(), Address: srv.Address()})
-		}
+	s.serverRegistry.RemoveServer(srv)
+	s.log.Debugf("removed server for socket connection \"%s\"", name)
+	if s.events != nil {
+		s.events.Publish(event.TopicServerUnregistered, event.ServerPayload{Name: srv.Name(), Address: srv.Address()})
 	}
 }
 
