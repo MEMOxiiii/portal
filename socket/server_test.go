@@ -8,6 +8,7 @@ import (
 	"github.com/paroxity/portal/event"
 	"github.com/paroxity/portal/server"
 	"github.com/paroxity/portal/session"
+	"github.com/paroxity/portal/socket/packet"
 )
 
 // TestTryAuthenticateCaseInsensitive guards against a regression where the socket client map (case-sensitive
@@ -55,6 +56,37 @@ func TestHandleClientAuthTimeout(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("handleClient never returned for a connection that never authenticated within authTimeout")
+	}
+}
+
+// TestHandleClientAuthResponseWriteTimeout guards against a regression where authTimeout only bounded
+// reads: a client that completed the handshake read but never read the response back could block the
+// server forever inside WritePacket.
+func TestHandleClientAuthResponseWriteTimeout(t *testing.T) {
+	old := authTimeout
+	authTimeout = 50 * time.Millisecond
+	defer func() { authTimeout = old }()
+
+	srv := NewDefaultServer(":0", "secret", session.NewDefaultStore(), server.NewDefaultRegistry(), nopLogger{}, false, nil)
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	done := make(chan struct{})
+	go func() {
+		srv.handleClient(NewClient(serverSide, nopLogger{}, false))
+		close(done)
+	}()
+
+	clientWriter := NewClient(clientSide, nopLogger{}, false)
+	if err := clientWriter.WritePacket(&packet.AuthRequest{Protocol: packet.ProtocolVersion, Secret: "secret", Name: "backend"}); err != nil {
+		t.Fatalf("WritePacket: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleClient blocked writing the auth response to a client that never read it")
 	}
 }
 

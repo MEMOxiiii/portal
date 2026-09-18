@@ -58,10 +58,15 @@ func (r *Registry) AddServer(srv *Server) {
 	r.servers[strings.ToLower(srv.Name())] = srv
 }
 
-// RemoveServer removes a server from the register.
+// RemoveServer removes srv from the register, but only if it's still the server currently registered under
+// its name: a fast re-register under the same name can replace it before an old caller gets around to
+// removing it, and that must not remove the replacement.
 func (r *Registry) RemoveServer(srv *Server) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	delete(r.servers, strings.ToLower(srv.Name()))
+	key := strings.ToLower(srv.Name())
+	if r.servers[key] == srv {
+		delete(r.servers, key)
+	}
 }
