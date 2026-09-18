@@ -273,16 +273,21 @@ func (t *translator) translateEntityLink(x protocol.EntityLink) protocol.EntityL
 	return x
 }
 
-// translateEntityMetadata returns the correct entity metadata for the client to function properly. It translates the
-// entity IDs to make sure there are no conflicts after transferring servers.
+// entityMetadataUniqueIDKeys are the metadata keys that ever hold a translatable unique ID.
+var entityMetadataUniqueIDKeys = [...]uint32{5, 6, 17, 37, 88}
+
+// translateEntityMetadata returns the correct entity metadata for the client to function properly. It
+// translates the entity IDs to make sure there are no conflicts after transferring servers. Looks up the
+// handful of relevant keys directly rather than scanning every entry: this runs on SetActorData, sent very
+// frequently for every visible entity, whose metadata maps can hold dozens of unrelated entries.
 func (t *translator) translateEntityMetadata(x map[uint32]interface{}) map[uint32]interface{} {
-	for k, v := range x {
-		switch k {
-		case 5, 6, 17, 37, 88: // Unique ID metadata entries.
+	for _, k := range entityMetadataUniqueIDKeys {
+		if v, ok := x[k]; ok {
 			x[k] = t.translateMetadataUniqueID(v)
-		case 124: // Base Runtime ID.
-			x[k] = t.translateMetadataRuntimeID(v)
 		}
+	}
+	if v, ok := x[124]; ok { // Base Runtime ID.
+		x[124] = t.translateMetadataRuntimeID(v)
 	}
 	return x
 }

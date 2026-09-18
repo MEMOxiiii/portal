@@ -70,3 +70,18 @@ func TestTranslateRuntimeIDHelpers(t *testing.T) {
 		t.Fatalf("expected translated int64 runtime ID 33, got %d", got)
 	}
 }
+
+func BenchmarkTranslateEntityMetadata(b *testing.B) {
+	tr := newTestTranslator()
+	meta := make(map[uint32]interface{}, 40)
+	for i := uint32(0); i < 40; i++ {
+		meta[i] = int64(i)
+	}
+	meta[5] = int64(22)
+	meta[124] = uint32(11)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tr.translateEntityMetadata(meta)
+	}
+}
