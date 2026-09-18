@@ -195,10 +195,12 @@ func main() {
 				defer ticker.Stop()
 				for range ticker.C {
 					for _, s := range p.SessionStore().All() {
-						name := s.Conn().IdentityData().DisplayName
-						if err := clusterBackend.Announce(clusterProxyID, name, s.Server().Name()); err != nil {
-							logger.Errorf("cluster heartbeat failed for %s: %v", name, err)
-						}
+						go func(s *session.Session) {
+							name := s.Conn().IdentityData().DisplayName
+							if err := clusterBackend.Announce(clusterProxyID, name, s.Server().Name()); err != nil {
+								logger.Errorf("cluster heartbeat failed for %s: %v", name, err)
+							}
+						}(s)
 					}
 				}
 			}()
