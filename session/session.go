@@ -486,6 +486,7 @@ func (s *Session) abortStuckTransfer(srv *server.Server) {
 	err := fmt.Errorf("transfer to %s timed out waiting for client confirmation", srv.Name())
 	s.log.Errorf("%s", err)
 	s.completeTransfer(err)
+	s.Disconnect(fmt.Sprintf("Transfer to %s timed out, please reconnect.", srv.Name()))
 }
 
 // Transferring returns if the session is currently transferring to a different server or not.
