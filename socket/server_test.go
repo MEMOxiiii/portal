@@ -2,6 +2,7 @@ package socket
 
 import (
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +88,50 @@ func TestHandleClientAuthResponseWriteTimeout(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("handleClient blocked writing the auth response to a client that never read it")
+	}
+}
+
+// TestHandleClientDisconnectConcurrentReconnectSameName guards against a regression where
+// handleClientDisconnect looked up the registry entry to remove after releasing clientsMu: a new connection
+// racing in under the same name could authenticate and register in that window, and the old connection's
+// cleanup would then remove the new registration instead of its own (RemoveServer's own identity check, #16,
+// doesn't help here, since the code re-derives "the current occupant of the name" by name after the window
+// has already passed, rather than holding a reference to what it actually owned).
+func TestHandleClientDisconnectConcurrentReconnectSameName(t *testing.T) {
+	srv := NewDefaultServer(":0", "secret", session.NewDefaultStore(), server.NewDefaultRegistry(), nopLogger{}, false, nil)
+
+	for round := 0; round < 200; round++ {
+		conn1, _ := net.Pipe()
+		c1 := NewClient(conn1, nopLogger{}, false)
+		if !srv.TryAuthenticate(c1, "backend1") {
+			t.Fatalf("round %d: TryAuthenticate(c1) failed", round)
+		}
+		srv.ServerRegistry().AddServer(server.New("backend1", "127.0.0.1:1", server.TransportRakNet, "", 1, false))
+
+		conn2, _ := net.Pipe()
+		c2 := NewClient(conn2, nopLogger{}, false)
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			srv.handleClientDisconnect(c1)
+		}()
+		go func() {
+			defer wg.Done()
+			if srv.TryAuthenticate(c2, "backend1") {
+				srv.ServerRegistry().AddServer(server.New("backend1", "127.0.0.1:2", server.TransportRakNet, "", 1, false))
+			}
+		}()
+		wg.Wait()
+
+		if got, ok := srv.Client("backend1"); ok && got == c2 {
+			if _, regOK := srv.ServerRegistry().Server("backend1"); !regOK {
+				t.Fatalf("round %d: c2 authenticated but its server registration was removed by c1's disconnect cleanup", round)
+			}
+		}
+
+		srv.handleClientDisconnect(c2)
 	}
 }
 
