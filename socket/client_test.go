@@ -39,7 +39,7 @@ func TestClientWritePacketConcurrent(t *testing.T) {
 	}
 	reads := make(chan result, n)
 	go func() {
-		for i := 0; i < n; i++ {
+		for range n {
 			pk, err := reader.ReadPacket()
 			if err != nil {
 				reads <- result{err: err}
@@ -54,14 +54,14 @@ func TestClientWritePacketConcurrent(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < n; i++ {
+	for range n {
 		if err := <-writeErrs; err != nil {
 			t.Fatalf("WritePacket: %v", err)
 		}
 	}
 
 	seen := make(map[uuid.UUID]bool, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		r := <-reads
 		if r.err != nil {
 			t.Fatalf("ReadPacket: %v", r.err)

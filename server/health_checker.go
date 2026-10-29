@@ -148,7 +148,7 @@ func pingNetherNet(address string, timeout time.Duration) error {
 	return nil
 }
 
-func (h *HealthChecker) logf(format string, v ...interface{}) {
+func (h *HealthChecker) logf(format string, v ...any) {
 	if h.log != nil {
 		h.log.Errorf(format, v...)
 	}

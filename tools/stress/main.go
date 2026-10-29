@@ -31,10 +31,10 @@ const secret = "stress-secret"
 
 type nopLogger struct{}
 
-func (nopLogger) Debugf(string, ...interface{}) {}
-func (nopLogger) Infof(string, ...interface{})  {}
-func (nopLogger) Errorf(string, ...interface{}) {}
-func (nopLogger) Fatalf(string, ...interface{}) {}
+func (nopLogger) Debugf(string, ...any) {}
+func (nopLogger) Infof(string, ...any)  {}
+func (nopLogger) Errorf(string, ...any) {}
+func (nopLogger) Fatalf(string, ...any) {}
 
 func main() {
 	clients := 400
@@ -97,7 +97,7 @@ func main() {
 			// a small backoff so a 400-at-once SYN burst on loopback doesn't count as a proxy failure.
 			var conn net.Conn
 			var err error
-			for attempt := 0; attempt < 5; attempt++ {
+			for attempt := range 5 {
 				conn, err = net.Dial("tcp", addr)
 				if err == nil {
 					break
@@ -229,7 +229,7 @@ func main() {
 
 	// Give the server a moment to process the disconnects and clean up the registry.
 	drained := false
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if len(p.ServerRegistry().Servers()) == 0 && len(ss.Clients()) == 0 {
 			drained = true
 			break

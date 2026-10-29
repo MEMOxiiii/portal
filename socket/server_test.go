@@ -130,7 +130,7 @@ func TestHandleClientAuthResponseWriteTimeout(t *testing.T) {
 func TestHandleClientDisconnectConcurrentReconnectSameName(t *testing.T) {
 	srv := NewDefaultServer(":0", "secret", session.NewDefaultStore(), server.NewDefaultRegistry(), nopLogger{}, false, nil)
 
-	for round := 0; round < 200; round++ {
+	for round := range 200 {
 		conn1, _ := net.Pipe()
 		c1 := NewClient(conn1, nopLogger{}, false)
 		if !srv.TryAuthenticate(c1, "backend1") {

@@ -34,7 +34,7 @@ func TestStoreConcurrentReconnectSameUUID(t *testing.T) {
 	store := NewDefaultStore()
 	id := uuid.New()
 
-	for round := 0; round < 200; round++ {
+	for round := range 200 {
 		old := &Session{uuid: id, conn: &minecraft.Conn{}}
 		store.mu.Lock()
 		store.sessions[id] = old

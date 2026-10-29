@@ -63,7 +63,7 @@ func (c *Client) Close() error {
 
 // Authenticate marks the client as authenticated and gives it the provided name.
 func (c *Client) Authenticate(name string) {
-	if c.authenticated.CAS(false, true) {
+	if c.authenticated.CompareAndSwap(false, true) {
 		c.name = name
 	}
 }

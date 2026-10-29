@@ -53,16 +53,16 @@ type capLogger struct {
 	lines []string
 }
 
-func (l *capLogger) add(level, format string, v ...interface{}) {
+func (l *capLogger) add(level, format string, v ...any) {
 	s := level + " " + fmt.Sprintf(format, v...)
 	l.mu.Lock()
 	l.lines = append(l.lines, s)
 	l.mu.Unlock()
 }
-func (l *capLogger) Debugf(f string, v ...interface{}) { l.add("DEBUG", f, v...) }
-func (l *capLogger) Infof(f string, v ...interface{})  { l.add("INFO", f, v...) }
-func (l *capLogger) Errorf(f string, v ...interface{}) { l.add("ERROR", f, v...) }
-func (l *capLogger) Fatalf(f string, v ...interface{}) { l.add("FATAL", f, v...) } // do not exit in tests
+func (l *capLogger) Debugf(f string, v ...any) { l.add("DEBUG", f, v...) }
+func (l *capLogger) Infof(f string, v ...any)  { l.add("INFO", f, v...) }
+func (l *capLogger) Errorf(f string, v ...any) { l.add("ERROR", f, v...) }
+func (l *capLogger) Fatalf(f string, v ...any) { l.add("FATAL", f, v...) } // do not exit in tests
 func (l *capLogger) has(sub string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -330,7 +330,7 @@ func testAuthThrottle() {
 
 	// Attempts 1..5 should each get IncorrectSecret; the 6th must be blocked (no auth round-trip).
 	firstFive := true
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if statuses[i] != int(packet.AuthResponseIncorrectSecret) {
 			firstFive = false
 		}
@@ -508,7 +508,7 @@ func testHealthCheck() {
 
 	// Bring it back; it should recover.
 	var lst2 *raknet.Listener
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		lst2, err = raknet.Listen(addr)
 		if err == nil {
 			break
@@ -543,7 +543,7 @@ func testWeightedLoadBalancing() {
 	lb := session.NewGroupedLoadBalancer(reg, "lobby")
 
 	const total = 1000
-	for i := 0; i < total; i++ {
+	for i := range total {
 		srv := lb.FindServer(nil)
 		if srv == nil {
 			rec("8-loadbalance", "1000 placements", "FAIL", fmt.Sprintf("nil server at join %d", i))
@@ -561,7 +561,7 @@ func testWeightedLoadBalancing() {
 	// Draining server is excluded from new placements.
 	w3.SetDraining(true)
 	before1 := w1.PlayerCount()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		lb.FindServer(nil).IncrementPlayerCount()
 	}
 	check("8-loadbalance", "draining excluded", w1.PlayerCount() == before1+100 && w3.PlayerCount() == c3,
@@ -571,7 +571,7 @@ func testWeightedLoadBalancing() {
 	// Unhealthy server is excluded too.
 	w3.SetHealthy(false)
 	before1 = w1.PlayerCount()
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		lb.FindServer(nil).IncrementPlayerCount()
 	}
 	check("8-loadbalance", "unhealthy excluded", w1.PlayerCount() == before1+50,
@@ -595,7 +595,7 @@ func testIPGuard() {
 	client := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 6000}
 	allowed := 0
 	var lastMsg string
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		ok, lastMsg = g.Allow(client)
 		if ok {
 			allowed++
