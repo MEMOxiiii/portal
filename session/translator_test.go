@@ -18,7 +18,7 @@ func newTestTranslator() *translator {
 
 func TestTranslateEntityMetadataHandlesMixedNumericTypes(t *testing.T) {
 	tr := newTestTranslator()
-	meta := map[uint32]interface{}{
+	meta := map[uint32]any{
 		5:   int64(22),
 		6:   int32(22),
 		17:  uint64(22),
@@ -60,6 +60,22 @@ func TestTranslatePacketChangeMobPropertyUsesUniqueID(t *testing.T) {
 	}
 }
 
+func TestTranslatePacketNewUniqueIDPackets(t *testing.T) {
+	tr := newTestTranslator()
+	passenger := &packet.SetPassengerOfBlock{PassengerUniqueID: 22}
+	stonecutter := &packet.ClientboundStonecutterSetRecipe{PlayerUniqueID: 22}
+
+	tr.translatePacket(passenger)
+	tr.translatePacket(stonecutter)
+
+	if passenger.PassengerUniqueID != 44 {
+		t.Fatalf("expected translated passenger unique ID 44, got %d", passenger.PassengerUniqueID)
+	}
+	if stonecutter.PlayerUniqueID != 44 {
+		t.Fatalf("expected translated stonecutter player unique ID 44, got %d", stonecutter.PlayerUniqueID)
+	}
+}
+
 func TestTranslateRuntimeIDHelpers(t *testing.T) {
 	tr := newTestTranslator()
 
@@ -73,8 +89,8 @@ func TestTranslateRuntimeIDHelpers(t *testing.T) {
 
 func BenchmarkTranslateEntityMetadata(b *testing.B) {
 	tr := newTestTranslator()
-	meta := make(map[uint32]interface{}, 40)
-	for i := uint32(0); i < 40; i++ {
+	meta := make(map[uint32]any, 40)
+	for i := range uint32(40) {
 		meta[i] = int64(i)
 	}
 	meta[5] = int64(22)

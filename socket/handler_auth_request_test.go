@@ -11,10 +11,10 @@ import (
 
 type nopLogger struct{}
 
-func (nopLogger) Debugf(string, ...interface{}) {}
-func (nopLogger) Infof(string, ...interface{})  {}
-func (nopLogger) Errorf(string, ...interface{}) {}
-func (nopLogger) Fatalf(string, ...interface{}) {}
+func (nopLogger) Debugf(string, ...any) {}
+func (nopLogger) Infof(string, ...any)  {}
+func (nopLogger) Errorf(string, ...any) {}
+func (nopLogger) Fatalf(string, ...any) {}
 
 // TestAuthRequestHandlerEmptySecretRejected guards against a regression where a communication server
 // constructed with an empty secret (e.g. a default, never-configured config.json) authenticated any

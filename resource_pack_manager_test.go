@@ -124,9 +124,7 @@ func TestResourcePackManagerConcurrentReloadAndRead(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 24)
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				packs := manager.ResourcePacks()
 				if len(packs) != 1 {
@@ -139,19 +137,17 @@ func TestResourcePackManagerConcurrentReloadAndRead(t *testing.T) {
 				}
 				packs[0] = nil
 			}
-		}()
+		})
 	}
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 20 {
 				if err := manager.Reload(); err != nil {
 					errs <- err
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

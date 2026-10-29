@@ -257,7 +257,7 @@ func (s *Session) Handle(h Handler) {
 // the initial transfer.
 func (s *Session) Transfer(srv *server.Server) (err error) {
 	s.waitForLogin()
-	if !s.transferring.CAS(false, true) {
+	if !s.transferring.CompareAndSwap(false, true) {
 		return errors.New("already being transferred")
 	}
 	s.postTransfer.Store(false)
@@ -288,7 +288,7 @@ func (s *Session) Transfer(srv *server.Server) (err error) {
 	ctx.Continue(func() {
 		// If the player is dead, force-respawn them before transferring.
 		// Without this, the dimension trick fails and the player gets stuck.
-		if s.dead.CAS(true, false) {
+		if s.dead.CompareAndSwap(true, false) {
 			_ = s.conn.WritePacket(&packet.Respawn{
 				Position:        s.conn.GameData().PlayerPosition,
 				State:           packet.RespawnStateReadyToSpawn,
@@ -439,7 +439,7 @@ func (s *Session) finishTransferDimensionChange() (gameData minecraft.GameData, 
 		Radius: uint32(gameData.ChunkRadius) << 4,
 	})
 
-	if s.dead.CAS(true, false) {
+	if s.dead.CompareAndSwap(true, false) {
 		_ = s.conn.WritePacket(&packet.Respawn{
 			Position:        gameData.PlayerPosition,
 			State:           packet.RespawnStateReadyToSpawn,
@@ -509,7 +509,7 @@ func (s *Session) handler() Handler {
 // Close closes the session and any linked connections/counters.
 func (s *Session) Close() {
 	s.once.Do(func() {
-		if s.transferring.CAS(true, false) {
+		if s.transferring.CompareAndSwap(true, false) {
 			s.postTransfer.Store(false)
 			s.completeTransfer(errors.New("session closed during transfer"))
 		}

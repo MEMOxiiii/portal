@@ -45,7 +45,7 @@ func handlePackets(s *Session) {
 						// tempServerConn wasn't set yet: the client sent DimensionChangeDone before the
 						// transfer's dial/login to the target server finished (transferring is set well
 						// before tempServerConn is). Fall through and forward it like any other packet.
-					} else if s.postTransfer.CAS(true, false) {
+					} else if s.postTransfer.CompareAndSwap(true, false) {
 						continue
 					}
 				}

@@ -92,6 +92,8 @@ func (t *translator) translatePacket(pk packet.Packet) {
 			}
 			pk.TrackedObjects = protocol.Option(objects)
 		}
+	case *packet.ClientboundStonecutterSetRecipe:
+		pk.PlayerUniqueID = t.translateUniqueID(pk.PlayerUniqueID)
 	case *packet.ClientCheatAbility:
 		pk.AbilityData.EntityUniqueID = t.translateUniqueID(pk.AbilityData.EntityUniqueID)
 	case *packet.CommandBlockUpdate:
@@ -176,6 +178,8 @@ func (t *translator) translatePacket(pk packet.Packet) {
 		pk.EntityLink = t.translateEntityLink(pk.EntityLink)
 	case *packet.SetActorMotion:
 		pk.EntityRuntimeID = t.translateRuntimeID(pk.EntityRuntimeID)
+	case *packet.SetPassengerOfBlock:
+		pk.PassengerUniqueID = t.translateUniqueID(pk.PassengerUniqueID)
 	case *packet.SetLocalPlayerAsInitialised:
 		pk.EntityRuntimeID = t.translateRuntimeID(pk.EntityRuntimeID)
 	case *packet.SetScore:
@@ -280,7 +284,7 @@ var entityMetadataUniqueIDKeys = [...]uint32{5, 6, 17, 37, 88}
 // translates the entity IDs to make sure there are no conflicts after transferring servers. Looks up the
 // handful of relevant keys directly rather than scanning every entry: this runs on SetActorData, sent very
 // frequently for every visible entity, whose metadata maps can hold dozens of unrelated entries.
-func (t *translator) translateEntityMetadata(x map[uint32]interface{}) map[uint32]interface{} {
+func (t *translator) translateEntityMetadata(x map[uint32]any) map[uint32]any {
 	for _, k := range entityMetadataUniqueIDKeys {
 		if v, ok := x[k]; ok {
 			x[k] = t.translateMetadataUniqueID(v)
@@ -292,7 +296,7 @@ func (t *translator) translateEntityMetadata(x map[uint32]interface{}) map[uint3
 	return x
 }
 
-func (t *translator) translateMetadataUniqueID(v interface{}) interface{} {
+func (t *translator) translateMetadataUniqueID(v any) any {
 	switch value := v.(type) {
 	case int64:
 		return t.translateUniqueID(value)
@@ -311,7 +315,7 @@ func (t *translator) translateMetadataUniqueID(v interface{}) interface{} {
 	}
 }
 
-func (t *translator) translateMetadataRuntimeID(v interface{}) interface{} {
+func (t *translator) translateMetadataRuntimeID(v any) any {
 	switch value := v.(type) {
 	case uint64:
 		return t.translateRuntimeID(value)

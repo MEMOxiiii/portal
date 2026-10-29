@@ -24,16 +24,16 @@ import (
 	"github.com/paroxity/portal/socket/packet"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
-	gtpacket "github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/login"
+	gtpacket "github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 )
 
 type nopLogger struct{}
 
-func (nopLogger) Debugf(string, ...interface{}) {}
-func (nopLogger) Infof(string, ...interface{})  {}
-func (nopLogger) Errorf(string, ...interface{}) {}
-func (nopLogger) Fatalf(string, ...interface{}) {}
+func (nopLogger) Debugf(string, ...any) {}
+func (nopLogger) Infof(string, ...any)  {}
+func (nopLogger) Errorf(string, ...any) {}
+func (nopLogger) Fatalf(string, ...any) {}
 
 var failed bool
 
